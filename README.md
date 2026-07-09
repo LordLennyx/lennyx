@@ -6,6 +6,28 @@ récompenses.
 
 100 % gratuit, 100 % local : tes données ne quittent jamais ton appareil.
 
+## 📱 Installer Lennyx sur ton téléphone
+
+**Option A — L'APK (recommandé)**
+1. Récupère `Lennyx-0.3.0.apk` (dossier `release/` si compilé en local, ou artefact
+   *Lennyx-Android* de GitHub Actions après un push).
+2. Envoie-le sur ton téléphone (câble USB, ou Réglages → Synchronisation… ou n'importe quoi).
+3. Ouvre le fichier sur le téléphone → Android demande d'autoriser « l'installation
+   d'applications inconnues » pour ton gestionnaire de fichiers → accepte → Installer.
+4. Au premier lancement, **autorise les notifications** quand Lennyx le demande : c'est ce qui
+   permet aux rappels de sonner même application fermée.
+
+**Option B — La version web installable (PWA)**
+1. Pousse le projet sur GitHub, active Pages (Settings → Pages → Source : *GitHub Actions*).
+2. Sur le téléphone, ouvre `https://<ton-pseudo>.github.io/lennyx/` dans Chrome.
+3. Menu ⋮ → **« Ajouter à l'écran d'accueil »** → Lennyx s'installe comme une vraie app,
+   fonctionne hors-ligne après le premier chargement.
+   (Limites PWA : notifications seulement app ouverte, pas de sync réseau local depuis https.)
+
+**Synchroniser PC ↔ téléphone** : sur le PC (app installée), Réglages → Synchronisation →
+« Démarrer la session » ; sur le téléphone, saisis l'adresse et le code affichés (même Wi-Fi).
+Tu choisis le sens : récupérer la sauvegarde du PC, ou envoyer celle du téléphone.
+
 ## ✨ Fonctionnalités (v0.2)
 
 - **Quêtes** avec sous-quêtes, difficulté (facile → épique), échéance, rubrique, et
@@ -29,6 +51,21 @@ récompenses.
 - **Statistiques** : graphe d'XP 14 jours, ponctualité, journées parfaites, rubriques favorites
 - **Sons synthétisés** (zéro fichier audio) et animations désactivables
 - **Export / import de sauvegarde** JSON pour transférer entre PC et téléphone
+
+## 🔔 Nouveautés v0.3
+
+- **Notifications** (pilier de l'app) : rappels de tâches chronométrées (5 min à 1 h avant,
+  réglable), ultime rappel à l'heure limite, briefing du matin, sentinelle du soir,
+  célébrations — chaque type a sa sonorité. Sur **Android, elles sonnent même app fermée**
+  (programmation native) ; sur PC, tant que Lennyx est ouvert.
+- **Bande sonore générative** : musique d'ambiance infinie composée en direct (nappes,
+  réverbération, mélodies pentatoniques), 3 ambiances — Éther, Bravoure, Focus — avec volumes
+  séparés effets/musique.
+- **Sons v2** : moteur de synthèse enrichi (FM, couches, percussions de bruit) — complétion,
+  record, journée parfaite, fanfare de niveau, tintement d'or, nappe de l'Oracle…
+- **Sync PC ↔ téléphone en réseau local** : le PC héberge une session (QR + code), le téléphone
+  tire ou pousse sa sauvegarde. Aucun serveur, aucune donnée ne quitte ton Wi-Fi.
+- **PWA** : la version web s'installe sur téléphone et fonctionne hors-ligne.
 
 ## 🛠️ Stack
 

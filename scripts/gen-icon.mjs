@@ -24,5 +24,14 @@ const svg = `<svg width="512" height="512" viewBox="0 0 100 100" xmlns="http://w
 </svg>`;
 
 mkdirSync('build', { recursive: true });
+mkdirSync('public/icons', { recursive: true });
 await sharp(Buffer.from(svg)).resize(512, 512).png().toFile('build/icon.png');
-console.log('build/icon.png généré');
+await sharp(Buffer.from(svg)).resize(512, 512).png().toFile('public/icons/icon-512.png');
+await sharp(Buffer.from(svg)).resize(192, 192).png().toFile('public/icons/icon-192.png');
+// maskable : zone de sécurité de 20 % (le système peut rogner en cercle)
+const inner = await sharp(Buffer.from(svg)).resize(400, 400).png().toBuffer();
+await sharp({ create: { width: 512, height: 512, channels: 4, background: '#0a0a0d' } })
+  .composite([{ input: inner, left: 56, top: 56 }])
+  .png()
+  .toFile('public/icons/maskable-512.png');
+console.log('Icônes générées : build/icon.png + public/icons/*');

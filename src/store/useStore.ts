@@ -15,6 +15,7 @@ import { answer, briefing, dailiesAtRisk, type OracleAction } from '../game/orac
 import type { TaskTemplate } from '../game/library';
 import { suggestTemplates } from '../game/oracle';
 import { playSound } from '../lib/sound';
+import { notifyNow } from '../lib/notify';
 
 interface LennyxState {
   profile: Profile;
@@ -58,6 +59,9 @@ interface LennyxState {
   setName: (name: string) => void;
   toggleSound: () => void;
   toggleMotion: () => void;
+  setAudio: (patch: Partial<Profile['audio']>) => void;
+  setNotify: (patch: Partial<Profile['notify']>) => void;
+  setSyncHost: (host: string) => void;
   pushToast: (icon: string, text: string, kind?: Toast['kind']) => void;
   dismissToast: (id: string) => void;
   clearLevelUp: () => void;
@@ -93,6 +97,8 @@ const defaultProfile = (): Profile => ({
   burstFx: 'burst-sparks',
   soundOn: true,
   motionOn: true,
+  audio: { volume: 0.7, music: true, mood: 'ether', musicVolume: 0.3 },
+  notify: { enabled: true, lead: 15, lastCall: true, briefingTime: '08:30', sentinelTime: '19:00', celebrate: true },
   oracle: { briefing: true, sentinel: true },
   history: {},
 });
@@ -134,6 +140,16 @@ export const useStore = create<LennyxState>()(
           const unlocks: string[] = [];
           for (let l = before.level + 1; l <= after.level; l++) unlocks.push(...unlocksAtLevel(l));
           playSound('levelup', p.soundOn);
+          if (p.notify.enabled && p.notify.celebrate) {
+            notifyNow(
+              'celebrate',
+              `Niveau ${after.level} atteint`,
+              after.rank.name !== before.rank.name
+                ? `Nouveau rang : ${after.rank.name}. La légende grandit.`
+                : `Rang ${after.rank.name} — continue l'ascension.`,
+              false,
+            );
+          }
           set({
             levelUp: {
               level: after.level,
@@ -198,6 +214,10 @@ export const useStore = create<LennyxState>()(
         const due = dailies.filter((d) => isScheduledOn(d.days, t));
         if (due.length === 0 || !due.every((d) => d.lastCompletedDate === t)) return p;
         pushToast('check', 'Journée parfaite : toutes tes quotidiennes sont faites', 'achievement');
+        playSound('perfect', p.soundOn);
+        if (p.notify.enabled && p.notify.celebrate) {
+          notifyNow('celebrate', 'Journée parfaite', `${due.length} quotidienne(s) sur ${due.length} — sans faute.`, false);
+        }
         return {
           ...p,
           lastPerfectDay: t,
@@ -448,7 +468,7 @@ export const useStore = create<LennyxState>()(
             },
             flags: isRecord ? { ...profile.flags, recordBreaker: true } : profile.flags,
           };
-          playSound(onTime ? 'complete' : 'fail', profile.soundOn);
+          playSound(!onTime ? 'fail' : isRecord ? 'record' : 'complete', profile.soundOn);
           if (onTime) fire(at);
           pushToast(
             !onTime ? 'clock' : isRecord ? 'chart' : 'flame',
@@ -522,6 +542,7 @@ export const useStore = create<LennyxState>()(
           const reply = answer(trimmed, { profile: s.profile, quests: s.quests, dailies: s.dailies });
           if (reply.actions) applyOracleActions(reply.actions);
           oracleSay(reply.text);
+          playSound('oracle', s.profile.soundOn);
           set((st) => ({ profile: checkAchievements(st.profile) }));
         },
         oracleClear: () => set({ oracleMessages: [] }),
@@ -613,6 +634,9 @@ export const useStore = create<LennyxState>()(
         setName: (name) => set((s) => ({ profile: { ...s.profile, name: name.trim() || 'Aventurier' } })),
         toggleSound: () => set((s) => ({ profile: { ...s.profile, soundOn: !s.profile.soundOn } })),
         toggleMotion: () => set((s) => ({ profile: { ...s.profile, motionOn: !s.profile.motionOn } })),
+        setAudio: (patch) => set((s) => ({ profile: { ...s.profile, audio: { ...s.profile.audio, ...patch } } })),
+        setNotify: (patch) => set((s) => ({ profile: { ...s.profile, notify: { ...s.profile.notify, ...patch } } })),
+        setSyncHost: (host) => set((s) => ({ profile: { ...s.profile, syncHost: host } })),
 
         resetAll: () =>
           set({
@@ -640,7 +664,7 @@ export const useStore = create<LennyxState>()(
     },
     {
       name: 'lennyx-save',
-      version: 2,
+      version: 3,
       partialize: (s) => ({
         profile: s.profile,
         quests: s.quests,
@@ -673,6 +697,16 @@ export const useStore = create<LennyxState>()(
             history: old.history ?? {},
           };
           data.oracleMessages = [];
+        }
+        if (version < 3 && data?.profile) {
+          // v3 : réglages audio, notifications, hôte de sync
+          const def = defaultProfile();
+          data.profile = {
+            ...def,
+            ...data.profile,
+            audio: { ...def.audio, ...data.profile.audio },
+            notify: { ...def.notify, ...data.profile.notify },
+          };
         }
         return data as any;
       },

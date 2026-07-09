@@ -81,6 +81,21 @@ export interface Profile {
   burstFx: string; // effet de complétion actif
   soundOn: boolean;
   motionOn: boolean; // animations ambiantes on/off
+  audio: {
+    volume: number; // 0..1 — volume des effets sonores
+    music: boolean; // bande sonore générative
+    mood: 'ether' | 'valor' | 'focus';
+    musicVolume: number; // 0..1
+  };
+  notify: {
+    enabled: boolean;
+    lead: number; // minutes d'avance pour les rappels de chronométrées (0 = désactivé)
+    lastCall: boolean; // ultime rappel à l'heure limite
+    briefingTime: string; // HH:MM ('' = désactivé)
+    sentinelTime: string; // HH:MM ('' = désactivé)
+    celebrate: boolean; // niveaux, records, journées parfaites
+  };
+  syncHost?: string; // dernière adresse de sync "ip:port" mémorisée
   oracle: { briefing: boolean; sentinel: boolean; lastBriefing?: string; lastSentinel?: string };
   lastPerfectDay?: string; // dernière journée parfaite comptée (YYYY-MM-DD)
   history: Record<string, number>; // YYYY-MM-DD -> XP gagné ce jour-là

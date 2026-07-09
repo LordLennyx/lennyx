@@ -15,3 +15,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 );
+
+// PWA : uniquement en contexte sécurisé (https / localhost) — pas en
+// Electron (file://) ni dans la WebView Capacitor (le natif s'en charge).
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      /* le SW est un bonus */
+    });
+  });
+}
