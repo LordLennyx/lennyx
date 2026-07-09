@@ -6,22 +6,29 @@ récompenses.
 
 100 % gratuit, 100 % local : tes données ne quittent jamais ton appareil.
 
-## ✨ Fonctionnalités (v0.1)
+## ✨ Fonctionnalités (v0.2)
 
-- **Quêtes** avec sous-quêtes (étapes), difficulté (facile → épique), échéance, et
-  **événements spéciaux** à récompense doublée 🌟
-- **Quêtes quotidiennes** programmables par jour de la semaine, avec **streak individuel**,
-  bonus de record 📈 et pénalité d'XP en cas d'oubli 😬
-- **XP et niveaux** : courbe de 25 000 XP jusqu'au niveau 100, 14 rangs, récompenses qui
-  augmentent avec ton niveau
-- **Combos** : chaque tâche accomplie le même jour augmente le multiplicateur ⚡
-- **Streak global** : jours consécutifs d'activité 🔥
-- **27 succès** à débloquer, chacun rapportant de l'or 🪙
-- **Boutique** : avatars et thèmes de couleurs à acheter avec l'or gagné 🛍️
-- **Statistiques** : graphe d'XP sur 14 jours, records, échelle des rangs
-- **Sons rétro synthétisés** (zéro fichier audio), désactivables
-- **Export / import de sauvegarde** en JSON pour transférer entre PC et téléphone
-- Interface **desktop + mobile**, thème sombre gamer 🎮
+- **Quêtes** avec sous-quêtes, difficulté (facile → épique), échéance, rubrique, et
+  **événements spéciaux** à récompense doublée
+- **Quêtes quotidiennes** programmables par jour, **streak individuel**, bonus de record,
+  pénalité d'XP en cas d'oubli — et **tâches chronométrées** (« arriver avant 8h00 » :
+  +25 % de ponctualité à l'heure, récompense réduite et streak brisé en retard)
+- **Bibliothèque** : ~120 modèles de tâches en 12 rubriques (travail, études, hygiène, sport,
+  nutrition, maison, finances, social, esprit, créativité, tech, sommeil) à ajouter en un clic
+- **L'Oracle** : agent intégré 100 % hors-ligne — conversation en français, création de tâches
+  en langage naturel, bilan hebdomadaire, briefing quotidien, sentinelle du soir,
+  « génère ma journée »
+- **XP et niveaux v2** : ~152 000 XP jusqu'au niveau 100 — des mois d'assiduité réelle, une
+  progression de plus en plus exigeante, 14 rangs
+- **Combos**, **streak global**, or, **69 succès**
+- **Boutique somptueuse** : 19 thèmes complets, 18 sigils héraldiques, 26 titres à porter,
+  effets ambiants et effets de complétion — certains réservés aux hauts niveaux
+- **Effets visuels** : fond animé (poussière d'étoiles, aurore, braises, pluie de code…),
+  particules à chaque tâche accomplie, level-up avec confettis et liste des déblocages
+- **Design** : monogramme « L » or, typographie Cinzel/Manrope, obsidienne & or, zéro emoji
+- **Statistiques** : graphe d'XP 14 jours, ponctualité, journées parfaites, rubriques favorites
+- **Sons synthétisés** (zéro fichier audio) et animations désactivables
+- **Export / import de sauvegarde** JSON pour transférer entre PC et téléphone
 
 ## 🛠️ Stack
 
@@ -66,10 +73,13 @@ npm run electron:build
 
 ## 🗺️ Roadmap
 
-- [ ] **v0.2** — Catégories de quêtes, filtres, recherche, notifications locales de rappel
-- [ ] **v0.3** — Sync PC ↔ téléphone par QR code **en réseau local** (aucun serveur, gratuit)
+- [x] **v0.2** — Bibliothèque de tâches, tâches chronométrées, Oracle, refonte visuelle,
+  rééquilibrage XP, catalogue étendu (thèmes, sigils, titres, effets)
+- [ ] **v0.3** — Sync PC ↔ téléphone par QR code **en réseau local** (aucun serveur, gratuit),
+  notifications locales de rappel
 - [ ] **v0.4** — Social : amis, défis, classements (nécessite un backend — free tier
-  Supabase/Firebase quand le budget/l'envie sera là)
+  Supabase/Firebase quand le budget/l'envie sera là) ; Oracle branché sur un vrai LLM en
+  option (clé API fournie par l'utilisateur)
 - [ ] **v1.0** — Boss de la semaine, saisons, quêtes d'histoire
 
 ## 💰 Monétisation
