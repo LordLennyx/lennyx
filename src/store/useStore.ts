@@ -176,9 +176,6 @@ export const useStore = create<LennyxState>()(
           const s = get();
           const t = todayStr();
           const yesterday = addDays(t, -1);
-          if (s.lastReconcile >= yesterday && s.profile.lastComboDate === t) {
-            // rien à faire, on est à jour
-          }
           let profile = { ...s.profile };
           // combo remis à zéro si nouveau jour
           if (profile.lastComboDate !== t) profile.combo = 0;
