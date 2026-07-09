@@ -16,6 +16,10 @@ import Ambient from './components/Ambient';
 import BurstFX from './components/BurstFX';
 import Logo from './components/Logo';
 import { Icon, Sigil } from './components/Icon';
+import { useNotifications } from './hooks/useNotifications';
+import { setSoundPrefs } from './lib/sound';
+import { startMusic, stopMusic, setMusicMood, setMusicVolume } from './lib/music';
+import { ensurePermission } from './lib/notify';
 
 type PageId = 'home' | 'quests' | 'dailies' | 'library' | 'oracle' | 'profile' | 'rewards' | 'settings';
 
@@ -42,6 +46,40 @@ export default function App() {
     const t = setInterval(reconcile, 60_000);
     return () => clearInterval(t);
   }, [reconcile]);
+
+  // notifications (rappels, briefing, sentinelle, natives sur Android)
+  useNotifications();
+  useEffect(() => {
+    if (profile.notify.enabled) void ensurePermission();
+  }, [profile.notify.enabled]);
+
+  // audio : volume des effets + bande sonore générative
+  useEffect(() => {
+    setSoundPrefs({ volume: profile.audio.volume });
+  }, [profile.audio.volume]);
+
+  useEffect(() => {
+    setMusicMood(profile.audio.mood);
+  }, [profile.audio.mood]);
+
+  useEffect(() => {
+    setMusicVolume(profile.audio.musicVolume);
+  }, [profile.audio.musicVolume]);
+
+  useEffect(() => {
+    if (!profile.audio.music) {
+      stopMusic();
+      return;
+    }
+    // l'AudioContext exige un geste utilisateur : on démarre au premier clic
+    const kick = () => startMusic(useStore.getState().profile.audio.mood, useStore.getState().profile.audio.musicVolume);
+    kick(); // tente tout de suite (Electron l'autorise)
+    window.addEventListener('pointerdown', kick, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', kick);
+      stopMusic();
+    };
+  }, [profile.audio.music]);
 
   // applique la palette du thème actif
   useEffect(() => {
