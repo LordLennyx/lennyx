@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useStore } from '../store/useStore';
+import { Icon } from './Icon';
 
 export default function Toasts() {
   const toasts = useStore((s) => s.toasts);
@@ -7,7 +8,7 @@ export default function Toasts() {
 
   useEffect(() => {
     if (toasts.length === 0) return;
-    const timers = toasts.map((t) => setTimeout(() => dismiss(t.id), 4000));
+    const timers = toasts.map((t) => setTimeout(() => dismiss(t.id), 4200));
     return () => timers.forEach(clearTimeout);
   }, [toasts, dismiss]);
 
@@ -15,7 +16,7 @@ export default function Toasts() {
     <div className="toasts">
       {toasts.map((t) => (
         <div key={t.id} className={`toast ${t.kind}`} onClick={() => dismiss(t.id)}>
-          <span style={{ fontSize: 18 }}>{t.icon}</span>
+          <Icon name={t.icon} size={17} />
           <span>{t.text}</span>
         </div>
       ))}

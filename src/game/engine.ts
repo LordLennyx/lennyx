@@ -1,11 +1,10 @@
-// ── Moteur de récompenses : XP, or, combos, streaks ──────────────────────
+// ── Moteur de récompenses : XP, or, combos, streaks, ponctualité ──────────
 
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'epic';
 export type QuestType = 'quest' | 'event';
 
 export interface DifficultyDef {
   label: string;
-  icon: string;
   color: string;
   questXp: number;
   dailyXp: number;
@@ -13,24 +12,28 @@ export interface DifficultyDef {
 }
 
 export const DIFFICULTIES: Record<Difficulty, DifficultyDef> = {
-  easy: { label: 'Facile', icon: '🟢', color: '#4ade80', questXp: 25, dailyXp: 10, gold: 5 },
-  normal: { label: 'Normal', icon: '🔵', color: '#38bdf8', questXp: 40, dailyXp: 15, gold: 10 },
-  hard: { label: 'Difficile', icon: '🟠', color: '#fb923c', questXp: 60, dailyXp: 25, gold: 20 },
-  epic: { label: 'Épique', icon: '🟣', color: '#c084fc', questXp: 90, dailyXp: 40, gold: 35 },
+  easy: { label: 'Facile', color: '#7fd1ae', questXp: 25, dailyXp: 10, gold: 4 },
+  normal: { label: 'Normal', color: '#5cb8e4', questXp: 40, dailyXp: 15, gold: 8 },
+  hard: { label: 'Difficile', color: '#e8964a', questXp: 60, dailyXp: 25, gold: 15 },
+  epic: { label: 'Épique', color: '#b48ef0', questXp: 90, dailyXp: 40, gold: 28 },
 };
 
 export const DIFFICULTY_ORDER: Difficulty[] = ['easy', 'normal', 'hard', 'epic'];
 
-/** Facteur d'échelle : la récompense XP augmente avec le niveau. */
-const LEVEL_SCALING = 0.05;
+/** La récompense XP augmente doucement avec le niveau (inflation contenue en v2). */
+const LEVEL_SCALING = 0.03;
 /** Bonus par cran de combo (tâches accomplies le même jour). */
 const COMBO_STEP = 0.05;
-const COMBO_MAX = 0.5;
+const COMBO_MAX = 0.4;
 /** Bonus par jour de streak sur une quête quotidienne. */
 const STREAK_STEP = 0.02;
-const STREAK_MAX = 0.5;
+const STREAK_MAX = 0.6;
 /** Bonus quand on bat son record de streak. */
 export const RECORD_BONUS = 0.25;
+/** Bonus de ponctualité (tâche chronométrée validée avant l'heure limite). */
+export const PUNCTUAL_BONUS = 0.25;
+/** Facteur appliqué à une tâche chronométrée validée en retard. */
+export const LATE_FACTOR = 0.5;
 /** Pénalité (fraction de l'XP de base) par quête quotidienne manquée. */
 export const MISS_PENALTY = 0.5;
 
@@ -56,7 +59,7 @@ export function questGold(difficulty: Difficulty, type: QuestType): number {
   return type === 'event' ? g * 2 : g;
 }
 
-// ── Helpers de dates (dates locales, format YYYY-MM-DD) ──────────────────
+// ── Helpers de dates et d'heures (tout en local) ──────────────────────────
 
 export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
@@ -77,6 +80,17 @@ export function addDays(dateStr: string, n: number): string {
 /** Jour de la semaine : 0 = dimanche … 6 = samedi. */
 export function dayOfWeek(dateStr: string): number {
   return new Date(dateStr + 'T12:00:00').getDay();
+}
+
+/** Heure courante au format HH:MM. */
+export function nowTimeStr(): string {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** true si l'heure courante est ≤ limite HH:MM. */
+export function isOnTime(limit: string): boolean {
+  return nowTimeStr() <= limit;
 }
 
 export const WEEKDAYS = [
