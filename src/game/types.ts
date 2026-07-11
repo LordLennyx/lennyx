@@ -34,6 +34,47 @@ export interface Daily {
   bestStreak: number;
   lastCompletedDate?: string; // YYYY-MM-DD
   completions: string[]; // historique de dates YYYY-MM-DD (borné)
+  times: Record<string, string>; // date -> HH:MM de complétion (pour l'Oracle)
+  lateDates: string[]; // dates validées en retard (chronométrées)
+}
+
+export interface TimeLogEntry {
+  id: string;
+  label: string;
+  taskId?: string; // daily ou quête liée (optionnel)
+  date: string; // YYYY-MM-DD
+  startedAt: string; // HH:MM
+  seconds: number;
+}
+
+export interface AlarmDef {
+  on: boolean;
+  time: string; // HH:MM
+  days: number[]; // vide = tous les jours
+  melody: string; // id de mélodie ('custom' = fichier importé)
+  volume: number; // 0..1
+}
+
+// ── Notes & Traces de vie ──────────────────────────────────────────────
+export type NoteKind = 'note' | 'resolution' | 'accomplishment';
+
+export interface NoteEntry {
+  id: string;
+  kind: NoteKind;
+  text: string;
+  date: string; // YYYY-MM-DD
+  ts: number;
+}
+
+export type TxType = 'income' | 'expense';
+
+export interface Transaction {
+  id: string;
+  type: TxType;
+  label: string;
+  amount: number; // toujours positif ; le signe dépend de `type`
+  category?: string;
+  date: string; // YYYY-MM-DD
 }
 
 export interface Counters {
@@ -47,6 +88,14 @@ export interface Counters {
   perfectDays: number; // journées où toutes les quotidiennes programmées ont été faites
   generated: number; // tâches créées depuis la bibliothèque
   oracleAsks: number; // messages envoyés à l'Oracle
+  totalSteps: number; // pas cumulés (capteur + manuel)
+  chronoSessions: number; // sessions de chronomètre terminées
+  chronoMinutes: number; // minutes chronométrées cumulées
+  alarmsStopped: number; // réveils arrêtés (lève-toi et marche)
+  breathingSessions: number; // séances de respiration/méditation terminées
+  notesLogged: number; // notes + résolutions écrites
+  accomplishments: number; // victoires consignées
+  oracleCloudAsks: number; // messages traités par l'Oracle en ligne
 }
 
 export interface OracleMessage {
@@ -94,9 +143,39 @@ export interface Profile {
     briefingTime: string; // HH:MM ('' = désactivé)
     sentinelTime: string; // HH:MM ('' = désactivé)
     celebrate: boolean; // niveaux, records, journées parfaites
+    intensity: 'discret' | 'normal' | 'duolingo'; // ton et fréquence des relances
   };
+  voice: {
+    spoken: boolean; // l'Oracle lit ses réponses à voix haute
+    voiceURI: string; // '' = voix système par défaut
+    rate: number; // 0.5..2
+    pitch: number; // 0.5..2
+  };
+  steps: {
+    goal: number; // objectif quotidien
+    counted: Record<string, number>; // date -> pas comptés par le capteur
+    manual: Record<string, number>; // date -> pas ajoutés à la main
+    bestDay: number;
+  };
+  alarms: {
+    wake: AlarmDef;
+    lullaby: AlarmDef;
+    customAudioName?: string; // nom du fichier importé (données dans localStorage à part)
+  };
+  wakeLog: Record<string, string>; // date -> HH:MM (heure d'arrêt du réveil)
   syncHost?: string; // dernière adresse de sync "ip:port" mémorisée
   oracle: { briefing: boolean; sentinel: boolean; lastBriefing?: string; lastSentinel?: string };
+  llm: {
+    provider: 'gemini';
+    apiKey: string; // clé personnelle de l'utilisateur, gratuite, stockée en local uniquement
+    model: string;
+    tone: 'chaleureux' | 'direct' | 'motivant';
+  };
+  onboarding: {
+    done: boolean;
+    goal?: string; // objectif de discipline choisi
+    rhythm?: string; // rythme de vie choisi
+  };
   lastPerfectDay?: string; // dernière journée parfaite comptée (YYYY-MM-DD)
   history: Record<string, number>; // YYYY-MM-DD -> XP gagné ce jour-là
 }

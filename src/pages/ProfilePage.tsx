@@ -4,6 +4,7 @@ import { addDays, todayStr } from '../game/engine';
 import { ACHIEVEMENTS, titleLabel } from '../game/content';
 import { LIBRARY } from '../game/library';
 import { Icon, Sigil } from '../components/Icon';
+import ShareCardButton from '../components/ShareCardButton';
 
 export default function ProfilePage() {
   const profile = useStore((s) => s.profile);
@@ -23,9 +24,30 @@ export default function ProfilePage() {
     .slice(0, 3)
     .map(([id, n]) => ({ rub: LIBRARY.find((r) => r.id === id), n }));
 
+  const t7 = todayStr();
+  let weekXp = 0;
+  for (let i = 0; i < 7; i++) weekXp += profile.history[addDays(t7, -i)] ?? 0;
+
   return (
     <div>
-      <h2 className="page-title">Profil</h2>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <h2 className="page-title">Profil</h2>
+        <ShareCardButton
+          label="Partager mes exploits"
+          build={() => ({
+            name: profile.name,
+            level: info.level,
+            rankName: info.rank.name,
+            headline: 'Bilan de la semaine',
+            stats: [
+              { label: 'XP gagnés (7 jours)', value: `+${weekXp.toLocaleString('fr-FR')}` },
+              { label: 'Streak actuel', value: `${profile.currentStreak} jour(s)` },
+              { label: 'Or amassé', value: profile.gold.toLocaleString('fr-FR') },
+              { label: 'Quêtes accomplies', value: `${profile.counters.quests}` },
+            ],
+          })}
+        />
+      </div>
       <p className="page-sub">Ta légende, chiffrée.</p>
 
       <div className="card ornate row" style={{ gap: 18 }}>

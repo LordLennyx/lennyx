@@ -9,7 +9,7 @@ récompenses.
 ## 📱 Installer Lennyx sur ton téléphone
 
 **Option A — L'APK (recommandé)**
-1. Récupère `Lennyx-0.3.0.apk` (dossier `release/` si compilé en local, ou artefact
+1. Récupère `Lennyx-0.5.0.apk` (dossier `release/` si compilé en local, ou artefact
    *Lennyx-Android* de GitHub Actions après un push).
 2. Envoie-le sur ton téléphone (câble USB, ou Réglages → Synchronisation… ou n'importe quoi).
 3. Ouvre le fichier sur le téléphone → Android demande d'autoriser « l'installation
@@ -67,6 +67,54 @@ Tu choisis le sens : récupérer la sauvegarde du PC, ou envoyer celle du télé
   tire ou pousse sa sauvegarde. Aucun serveur, aucune donnée ne quitte ton Wi-Fi.
 - **PWA** : la version web s'installe sur téléphone et fonctionne hors-ligne.
 
+## 🔮 Nouveautés v0.4
+
+- **Oracle v2** : moteur d'analyse sur toutes tes données — pose-lui « ai-je une chance
+  d'arriver au travail avant 8h ? » et il répond avec ton taux de réussite historique, ta
+  tendance sur 7 occurrences, ton heure moyenne de validation, ton réveil moyen et tes temps
+  chronométrés. **Programmes à thème** (« journée sportive et créative »), FAQ complète sur le
+  jeu, défis surprises, et **voix** : l'Oracle lit ses réponses (synthèse vocale native
+  Android / voix Windows, choix de la voix, débit et tonalité réglables).
+- **Module Outils** : **Chronomètre** (sessions nommées ou liées à une tâche, moyennes,
+  records, XP pour les sessions ≥ 10 min), **Alarmes** (réveil + berceuse, 9 mélodies
+  synthétisées + import de ton propre fichier audio, journal de réveil), **Podomètre**
+  (capteur de mouvement, objectif réglable, records, ajout manuel).
+- **Notifications ++** : intensité **Discret / Normal / Duolingo 😈** — le mode Duolingo
+  ajoute relance de midi, culpabilisation d'après-midi et double sentinelle, avec des dizaines
+  de messages variés.
+- **Logo Android** : le monogramme « L » orne enfin l'icône de l'application mobile.
+- **Bibliothèque XXL** : 18 rubriques (+ Relation amoureuse, Spiritualité, Animaux,
+  Sorties & Aventure, Administratif, Style & Image), ~200 modèles.
+- **Catalogue étendu** : 24 thèmes, 22 sigils, 35 titres, ~90 succès — couronnés par deux
+  trophées de légende : le titre **Souverain de Lennyx** (100 000 or) et le thème
+  **Trône Céleste** (250 000 or).
+
+## 🌐 Nouveautés v0.5
+
+- **Oracle en ligne** : connecte-le gratuitement à Google Gemini (palier gratuit, aucune carte
+  bancaire — clé sur aistudio.google.com/apikey) pour des réponses fluides, empathiques,
+  conversationnelles. Il croise sommeil, pas, budget, notes et statistiques pour te répondre
+  personnellement. **Résilience totale** : sans connexion (ou sans clé), il bascule aussitôt en
+  mode local hors-ligne — l'app ne bloque jamais.
+- **Module Notes & Traces de vie** : suivi des dépenses/revenus avec calcul automatique du reste
+  à vivre, journal libre et résolutions, registre des victoires (consigner un accomplissement
+  rapporte un peu d'XP).
+- **Onboarding guidé** : questionnaire d'orientation (objectif, rythme, ton de l'Oracle) puis
+  visite guidée animée de chaque rubrique, conclue par une animation « C'est parti ! ».
+- **Respiration & méditation flash** : cohérence cardiaque, respiration carrée, détente 4-7-8,
+  guide visuel animé, voix de l'Oracle en accompagnement, script de méditation flash.
+- **Widget natif Android** (écran d'accueil, vrai `AppWidgetProvider`) et **widget flottant
+  Windows** (fenêtre toujours au-dessus) affichant pas, streak et prochaine alarme.
+- **Carte de partage** : génère une image aux couleurs de Lennyx (bilan hebdo ou record chrono),
+  prête à partager ou télécharger — 100 % client, aucun serveur.
+- **Notifications encore plus poussées** intégrées au mode Duolingo (déjà présent en v0.4).
+
+> **Sync cloud multi-appareils liée à un compte** : volontairement **non incluse** en v0.5.
+> Une vraie synchro cloud demande un backend (authentification, base de données, chiffrement,
+> résolution de conflits) — un projet à part entière plutôt qu'un ajout bâclé en fin de version.
+> C'est la proposition concrète pour la v0.6 (candidat : Supabase, palier gratuit). En
+> attendant, la sync LAN par QR code (v0.3) et l'export JSON couvrent le transfert entre appareils.
+
 ## 🛠️ Stack
 
 | Couche | Techno |
@@ -114,9 +162,13 @@ npm run electron:build
   rééquilibrage XP, catalogue étendu (thèmes, sigils, titres, effets)
 - [ ] **v0.3** — Sync PC ↔ téléphone par QR code **en réseau local** (aucun serveur, gratuit),
   notifications locales de rappel
-- [ ] **v0.4** — Social : amis, défis, classements (nécessite un backend — free tier
-  Supabase/Firebase quand le budget/l'envie sera là) ; Oracle branché sur un vrai LLM en
-  option (clé API fournie par l'utilisateur)
+- [x] **v0.4** — Modules Outils (chrono/alarmes/podomètre), Oracle v2 (prédictions chiffrées),
+  notifications à intensité réglable, logo Android, bibliothèque XXL, catalogue étendu
+- [x] **v0.5** — Oracle en ligne (LLM gratuit + repli local résilient), Notes & Traces de vie,
+  onboarding guidé, respiration/méditation, widgets (Android natif + flottant Windows),
+  carte de partage
+- [ ] **v0.6** — Social : amis, défis, classements + **sync cloud multi-appareils** liée à un
+  compte (nécessite un vrai backend — palier gratuit Supabase/Firebase envisagé)
 - [ ] **v1.0** — Boss de la semaine, saisons, quêtes d'histoire
 
 ## 💰 Monétisation

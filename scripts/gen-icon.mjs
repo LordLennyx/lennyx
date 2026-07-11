@@ -23,6 +23,17 @@ const svg = `<svg width="512" height="512" viewBox="0 0 100 100" xmlns="http://w
   <path d="M32 79c7-3.2 15-3.6 22.5-1.1 6.8 2.3 12.8 2 17.5-.9" stroke="url(#g2)" stroke-width="1.5" stroke-linecap="round" fill="none"/>
 </svg>`;
 
+// variante ronde (Android round icons) et premier plan (adaptive icons)
+const svgRound = svg
+  .replace('<rect x="0" y="0" width="100" height="100" rx="22" fill="#0a0a0d"/>',
+    '<circle cx="50" cy="50" r="50" fill="#0a0a0d"/>');
+// premier plan : contenu réduit dans la zone de sécurité (66 %) sur fond transparent
+const svgForeground = `<svg width="432" height="432" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(50 50) scale(0.6) translate(-50 -50)">
+    ${svg.replace(/^<svg[^>]*>/, '').replace('<rect x="0" y="0" width="100" height="100" rx="22" fill="#0a0a0d"/>', '').replace('</svg>', '')}
+  </g>
+</svg>`;
+
 mkdirSync('build', { recursive: true });
 mkdirSync('public/icons', { recursive: true });
 await sharp(Buffer.from(svg)).resize(512, 512).png().toFile('build/icon.png');
@@ -34,4 +45,20 @@ await sharp({ create: { width: 512, height: 512, channels: 4, background: '#0a0a
   .composite([{ input: inner, left: 56, top: 56 }])
   .png()
   .toFile('public/icons/maskable-512.png');
-console.log('Icônes générées : build/icon.png + public/icons/*');
+
+// ── mipmaps Android : le même « L » majestueux sur le téléphone ──
+const DENSITIES = [
+  ['mdpi', 48, 108],
+  ['hdpi', 72, 162],
+  ['xhdpi', 96, 216],
+  ['xxhdpi', 144, 324],
+  ['xxxhdpi', 192, 432],
+];
+for (const [name, size, fg] of DENSITIES) {
+  const dir = `android/app/src/main/res/mipmap-${name}`;
+  mkdirSync(dir, { recursive: true });
+  await sharp(Buffer.from(svg)).resize(size, size).png().toFile(`${dir}/ic_launcher.png`);
+  await sharp(Buffer.from(svgRound)).resize(size, size).png().toFile(`${dir}/ic_launcher_round.png`);
+  await sharp(Buffer.from(svgForeground)).resize(fg, fg).png().toFile(`${dir}/ic_launcher_foreground.png`);
+}
+console.log('Icônes générées : build/icon.png + public/icons/* + mipmaps Android');
