@@ -100,9 +100,9 @@ ipcMain.handle('lennyx-sync-stop', async () => { stopSyncServer(); return true; 
 ipcMain.handle('lennyx-sync-update', async (_e, payload) => { syncPayload = payload; return true; });
 
 // ── Proxy vers l'Oracle en ligne (contourne le CORS, aucune restriction côté Node) ──
-ipcMain.handle('lennyx-llm-request', async (_e, { url, body }) => {
+ipcMain.handle('lennyx-llm-request', async (_e, { url, body, headers }) => {
   try {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(headers || {}) }, body });
     const text = await res.text();
     return { ok: res.ok, status: res.status, text };
   } catch (e) {

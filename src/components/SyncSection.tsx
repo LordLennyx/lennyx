@@ -28,7 +28,11 @@ function currentSaveJson(): string {
     profile: s.profile,
     quests: s.quests,
     dailies: s.dailies,
-    oracleMessages: s.oracleMessages,
+    oracleConversations: s.oracleConversations,
+    activeConversationId: s.activeConversationId,
+    timeLog: s.timeLog,
+    notes: s.notes,
+    transactions: s.transactions,
     lastReconcile: s.lastReconcile,
   });
 }

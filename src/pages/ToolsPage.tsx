@@ -6,8 +6,9 @@ import { Icon } from '../components/Icon';
 import { speak, stopSpeaking } from '../lib/voice';
 import ShareCardButton from '../components/ShareCardButton';
 import { levelFromXp } from '../game/xp';
+import { notifyNow } from '../lib/notify';
 
-type Tab = 'chrono' | 'alarms' | 'steps' | 'breathing';
+type Tab = 'chrono' | 'pomodoro' | 'alarms' | 'steps' | 'breathing';
 
 // ═══════════════ CHRONO ═══════════════
 
@@ -148,6 +149,149 @@ function ChronoTab() {
           </div>
         ))
       )}
+    </>
+  );
+}
+
+// ═══════════════ POMODORO ═══════════════
+
+type PomoPhase = 'idle' | 'work' | 'break' | 'longBreak';
+
+function PomodoroTab() {
+  const settings = useStore((s) => s.profile.pomodoro);
+  const setPomodoroSettings = useStore((s) => s.setPomodoroSettings);
+  const logPomodoro = useStore((s) => s.logPomodoro);
+  const soundOn = useStore((s) => s.profile.soundOn);
+  const notifyEnabled = useStore((s) => s.profile.notify.enabled);
+  const pomodoros = useStore((s) => s.profile.counters.pomodoros);
+
+  const [phase, setPhase] = useState<PomoPhase>('idle');
+  const [remaining, setRemaining] = useState(settings.workMin * 60);
+  const [cycle, setCycle] = useState(0); // sessions de travail complétées dans ce cycle
+  const [running, setRunning] = useState(false);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const durationFor = (p: PomoPhase) =>
+    p === 'work' ? settings.workMin * 60 : p === 'longBreak' ? settings.longBreakMin * 60 : settings.breakMin * 60;
+
+  const stopTick = () => { if (tickRef.current) clearInterval(tickRef.current); tickRef.current = null; };
+
+  const goToPhase = (p: PomoPhase, autoStart: boolean) => {
+    setPhase(p);
+    setRemaining(durationFor(p));
+    setRunning(autoStart);
+  };
+
+  const onPhaseEnd = () => {
+    stopTick();
+    if (phase === 'work') {
+      logPomodoro(settings.workMin);
+      const nextCycle = cycle + 1;
+      setCycle(nextCycle);
+      const isLong = nextCycle % settings.longBreakEvery === 0;
+      notifyNow('celebrate', 'Pomodoro terminé', isLong ? 'Pause longue méritée.' : 'Petite pause, puis on repart.', soundOn);
+      goToPhase(isLong ? 'longBreak' : 'break', false);
+    } else {
+      notifyNow('briefing', 'Pause terminée', 'Prêt pour une nouvelle session de travail ?', soundOn);
+      goToPhase('work', false);
+    }
+  };
+
+  useEffect(() => {
+    if (!running) return;
+    tickRef.current = setInterval(() => {
+      setRemaining((r) => {
+        if (r <= 1) { onPhaseEnd(); return 0; }
+        return r - 1;
+      });
+    }, 1000);
+    return stopTick;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+
+  const start = () => {
+    if (phase === 'idle') goToPhase('work', true);
+    else setRunning(true);
+  };
+  const pause = () => setRunning(false);
+  const reset = () => { stopTick(); setPhase('idle'); setRunning(false); setCycle(0); setRemaining(settings.workMin * 60); };
+  const skip = () => onPhaseEnd();
+
+  const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
+  const ss = String(Math.floor(remaining % 60)).padStart(2, '0');
+  const phaseLabel = phase === 'work' ? 'Travail' : phase === 'break' ? 'Pause' : phase === 'longBreak' ? 'Pause longue' : 'Prêt';
+  const phaseColor = phase === 'work' ? 'var(--accent)' : phase === 'idle' ? 'var(--muted)' : 'var(--success)';
+
+  return (
+    <>
+      <div className="card ornate" style={{ textAlign: 'center', padding: 30 }}>
+        <div className="badge" style={{ color: phaseColor, marginBottom: 14 }}>{phaseLabel}</div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 58, letterSpacing: '0.08em' }}>{mm}:{ss}</div>
+        <p className="muted" style={{ marginTop: 6 }}>
+          Session {cycle % settings.longBreakEvery === 0 && cycle > 0 ? settings.longBreakEvery : (cycle % settings.longBreakEvery) + 1}/{settings.longBreakEvery} avant la pause longue
+        </p>
+        <div className="row" style={{ justifyContent: 'center', marginTop: 16 }}>
+          {!running ? (
+            <button className="btn primary" style={{ padding: '12px 28px' }} onClick={start}>
+              <Icon name="bolt" size={15} /> {phase === 'idle' ? 'Démarrer' : 'Reprendre'}
+            </button>
+          ) : (
+            <button className="btn" style={{ padding: '12px 28px' }} onClick={pause}>Pause</button>
+          )}
+          <button className="btn small" onClick={skip} disabled={phase === 'idle'}>Passer</button>
+          <button className="btn small danger" onClick={reset} disabled={phase === 'idle' && !running}>Réinitialiser</button>
+        </div>
+      </div>
+
+      <h3 className="section-title"><Icon name="gear" size={13} /> Réglages</h3>
+      <div className="card">
+        <div className="row" style={{ gap: 16 }}>
+          <label className="row" style={{ gap: 8 }}>
+            <span className="muted">Travail</span>
+            <input
+              className="input" type="number" min={5} max={90} style={{ width: 70 }}
+              value={settings.workMin} onChange={(e) => setPomodoroSettings({ workMin: Math.max(5, Number(e.target.value)) })}
+            /> <span className="muted">min</span>
+          </label>
+          <label className="row" style={{ gap: 8 }}>
+            <span className="muted">Pause</span>
+            <input
+              className="input" type="number" min={1} max={30} style={{ width: 70 }}
+              value={settings.breakMin} onChange={(e) => setPomodoroSettings({ breakMin: Math.max(1, Number(e.target.value)) })}
+            /> <span className="muted">min</span>
+          </label>
+          <label className="row" style={{ gap: 8 }}>
+            <span className="muted">Pause longue</span>
+            <input
+              className="input" type="number" min={5} max={60} style={{ width: 70 }}
+              value={settings.longBreakMin} onChange={(e) => setPomodoroSettings({ longBreakMin: Math.max(5, Number(e.target.value)) })}
+            /> <span className="muted">min</span>
+          </label>
+          <label className="row" style={{ gap: 8 }}>
+            <span className="muted">Toutes les</span>
+            <input
+              className="input" type="number" min={2} max={8} style={{ width: 60 }}
+              value={settings.longBreakEvery} onChange={(e) => setPomodoroSettings({ longBreakEvery: Math.max(2, Number(e.target.value)) })}
+            /> <span className="muted">sessions</span>
+          </label>
+        </div>
+        {!notifyEnabled && (
+          <p className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+            Active les notifications dans Réglages pour être prévenu même en changeant d'onglet.
+          </p>
+        )}
+      </div>
+
+      <div className="stat-grid" style={{ marginTop: 12 }}>
+        <div className="stat-tile">
+          <div className="value">{pomodoros}</div>
+          <div className="label">Pomodoros accomplis</div>
+        </div>
+        <div className="stat-tile">
+          <div className="value">{cycle}</div>
+          <div className="label">Cette session</div>
+        </div>
+      </div>
     </>
   );
 }
@@ -556,6 +700,7 @@ export default function ToolsPage() {
   const [tab, setTab] = useState<Tab>('chrono');
   const TABS: Array<{ id: Tab; label: string; icon: string }> = [
     { id: 'chrono', label: 'Chrono', icon: 'hourglass' },
+    { id: 'pomodoro', label: 'Pomodoro', icon: 'clock' },
     { id: 'alarms', label: 'Alarmes', icon: 'sun' },
     { id: 'steps', label: 'Pas', icon: 'heart' },
     { id: 'breathing', label: 'Respiration', icon: 'sparkle' },
@@ -563,7 +708,7 @@ export default function ToolsPage() {
   return (
     <div>
       <h2 className="page-title">Outils</h2>
-      <p className="page-sub">Chronomètre, alarmes, podomètre et respiration — les instruments de ta discipline.</p>
+      <p className="page-sub">Chronomètre, Pomodoro, alarmes, podomètre et respiration — les instruments de ta discipline.</p>
       <div className="row" style={{ marginBottom: 16 }}>
         {TABS.map((t) => (
           <button key={t.id} className={`chip ${tab === t.id ? 'on' : ''}`} onClick={() => setTab(t.id)}>
@@ -572,6 +717,7 @@ export default function ToolsPage() {
         ))}
       </div>
       {tab === 'chrono' && <ChronoTab />}
+      {tab === 'pomodoro' && <PomodoroTab />}
       {tab === 'alarms' && <AlarmsTab />}
       {tab === 'steps' && <StepsTab />}
       {tab === 'breathing' && <BreathingTab />}

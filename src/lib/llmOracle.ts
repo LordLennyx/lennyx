@@ -1,18 +1,23 @@
-// ── Pont vers l'Oracle en ligne (Google Gemini, palier gratuit) ───────────
-// Aucun coût : l'utilisateur fournit sa propre clé API gratuite (aistudio.
-// google.com/apikey, aucune carte bancaire requise). La clé ne quitte jamais
-// l'appareil sauf pour l'appel direct à l'API Google.
+// ── Pont vers l'Oracle en ligne : Google Gemini ou Groq, paliers gratuits ─
+// Aucun coût : l'utilisateur fournit sa propre clé API gratuite. La clé ne
+// quitte jamais l'appareil sauf pour l'appel direct à l'API du fournisseur.
 //
-// CORS : sur Electron, la requête passe par le process principal (Node,
-// aucune restriction CORS) via window.lennyxLLM. Sur Android, CapacitorHttp
-// est activé (capacitor.config.ts) et patche fetch pour router nativement,
-// contournant aussi le CORS. Sur web nu, on tente un fetch direct.
+// ⚠ Le palier gratuit de Google Gemini n'est PAS disponible dans l'Union
+// Européenne, au Royaume-Uni ni en Suisse (restriction Google, pas un bug
+// de Lennyx — vérifié empiriquement : la clé s'authentifie, mais le quota
+// gratuit vaut 0 pour ces régions). Groq n'a pas cette restriction et est
+// recommandé par défaut.
+//
+// CORS : les deux API acceptent le fetch direct depuis le navigateur/WebView
+// (vérifié). Sur Electron, on passe quand même par le proxy IPC principal
+// par prudence (aucune restriction CORS possible côté Node) ; sur Android,
+// CapacitorHttp est activé en secours.
 
 import { buildDossier, type OracleAction, type OracleContext } from '../game/oracle';
 import type { OracleMessage } from '../game/types';
 
 interface LLMBridge {
-  request: (opts: { url: string; body: string }) => Promise<{ ok: boolean; status: number; text: string }>;
+  request: (opts: { url: string; body: string; headers?: Record<string, string> }) => Promise<{ ok: boolean; status: number; text: string }>;
 }
 
 const PERSONAS: Record<string, string> = {
@@ -50,61 +55,109 @@ function parseAction(raw: string): { text: string; actions?: OracleAction[] } {
   }
 }
 
-async function rawFetch(url: string, body: string): Promise<string> {
+async function rawFetch(url: string, body: string, headers: Record<string, string>): Promise<{ status: number; text: string }> {
   const bridge = (window as unknown as { lennyxLLM?: LLMBridge }).lennyxLLM;
   if (bridge) {
-    const res = await bridge.request({ url, body });
-    if (!res.ok) throw new Error(`L'Oracle n'a pas pu joindre le ciel (${res.status})`);
-    return res.text;
+    const res = await bridge.request({ url, body, headers });
+    return { status: res.status, text: res.text };
   }
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-  if (!res.ok) throw new Error(`L'Oracle n'a pas pu joindre le ciel (${res.status})`);
-  return await res.text();
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
+  return { status: res.status, text: await res.text() };
 }
 
 export class OracleOfflineError extends Error {}
+export class OracleQuotaError extends Error {}
 
-export async function askCloudOracle(
-  userText: string,
-  ctx: OracleContext,
-  history: OracleMessage[],
-): Promise<{ text: string; actions?: OracleAction[] }> {
-  const { apiKey, model } = ctx.profile.llm;
-  if (!apiKey) throw new OracleOfflineError('no-key');
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new OracleOfflineError('offline');
+interface ProviderResult {
+  text: string;
+}
 
+async function callGemini(system: string, history: OracleMessage[], userText: string, apiKey: string, model: string): Promise<ProviderResult> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const contents = [
     ...history.slice(-8).map((m) => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] })),
     { role: 'user', parts: [{ text: userText }] },
   ];
   const body = JSON.stringify({
-    system_instruction: { parts: [{ text: systemPrompt(ctx) }] },
+    system_instruction: { parts: [{ text: system }] },
     contents,
     generationConfig: { temperature: 0.9, maxOutputTokens: 500 },
   });
-
-  let raw: string;
-  try {
-    raw = await rawFetch(url, body);
-  } catch (e) {
-    throw new OracleOfflineError(e instanceof Error ? e.message : 'network');
-  }
-
+  const { status, text: raw } = await rawFetch(url, body, {});
   let data: any;
   try {
     data = JSON.parse(raw);
   } catch {
-    throw new Error("Réponse illisible de l'Oracle en ligne.");
+    throw new Error("Réponse illisible de Gemini.");
+  }
+  if (status === 429) {
+    throw new OracleQuotaError(
+      'Google Gemini : quota gratuit épuisé (ou indisponible dans ta région — le palier gratuit de Gemini n’est pas proposé dans l’UE/UK/Suisse). Essaie le fournisseur Groq dans Réglages.',
+    );
   }
   if (data?.error) throw new Error(data.error.message ?? 'Erreur de l’API Gemini');
   const textOut: string | undefined = data?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('');
   if (!textOut) throw new Error("L'Oracle est resté silencieux — réessaie dans un instant.");
-  return parseAction(textOut);
+  return { text: textOut };
+}
+
+async function callGroq(system: string, history: OracleMessage[], userText: string, apiKey: string, model: string): Promise<ProviderResult> {
+  const url = 'https://api.groq.com/openai/v1/chat/completions';
+  const messages = [
+    { role: 'system', content: system },
+    ...history.slice(-8).map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text })),
+    { role: 'user', content: userText },
+  ];
+  const body = JSON.stringify({ model, messages, temperature: 0.9, max_tokens: 500 });
+  const { status, text: raw } = await rawFetch(url, body, { Authorization: `Bearer ${apiKey}` });
+  let data: any;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error('Réponse illisible de Groq.');
+  }
+  if (status === 401) throw new Error('Clé Groq invalide ou expirée — vérifie-la dans Réglages.');
+  if (status === 429) throw new OracleQuotaError('Groq : quota atteint pour l’instant, réessaie dans un instant.');
+  if (data?.error) throw new Error(data.error.message ?? 'Erreur de l’API Groq');
+  const textOut: string | undefined = data?.choices?.[0]?.message?.content;
+  if (!textOut) throw new Error("L'Oracle est resté silencieux — réessaie dans un instant.");
+  return { text: textOut };
+}
+
+export async function askCloudOracle(
+  userText: string,
+  ctx: OracleContext,
+  history: OracleMessage[],
+): Promise<{ text: string; actions?: OracleAction[] }> {
+  const { apiKey, model, provider } = ctx.profile.llm;
+  if (!apiKey) throw new OracleOfflineError('no-key');
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new OracleOfflineError('offline');
+
+  const system = systemPrompt(ctx);
+  let result: ProviderResult;
+  try {
+    result = provider === 'groq'
+      ? await callGroq(system, history, userText, apiKey, model)
+      : await callGemini(system, history, userText, apiKey, model);
+  } catch (e) {
+    if (e instanceof OracleQuotaError || e instanceof OracleOfflineError) throw e;
+    throw new OracleOfflineError(e instanceof Error ? e.message : 'network');
+  }
+  return parseAction(result.text);
 }
 
 export const GEMINI_MODELS = [
-  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (rapide, recommandé)' },
-  { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-  { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (plus lent, plus fin)' },
+  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+  { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash-Lite' },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
 ];
+
+export const GROQ_MODELS = [
+  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (recommandé)' },
+  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (ultra-rapide)' },
+  { id: 'gemma2-9b-it', label: 'Gemma 2 9B' },
+];
+
+export function defaultModelFor(provider: 'gemini' | 'groq'): string {
+  return provider === 'groq' ? GROQ_MODELS[0].id : GEMINI_MODELS[0].id;
+}

@@ -96,6 +96,7 @@ export interface Counters {
   notesLogged: number; // notes + résolutions écrites
   accomplishments: number; // victoires consignées
   oracleCloudAsks: number; // messages traités par l'Oracle en ligne
+  pomodoros: number; // sessions Pomodoro terminées (travail)
 }
 
 export interface OracleMessage {
@@ -103,6 +104,15 @@ export interface OracleMessage {
   role: 'user' | 'oracle';
   text: string;
   ts: number;
+}
+
+/** Une conversation compartimentée avec l'Oracle (titre auto, historique propre). */
+export interface OracleConversation {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: OracleMessage[];
 }
 
 export interface Profile {
@@ -166,7 +176,7 @@ export interface Profile {
   syncHost?: string; // dernière adresse de sync "ip:port" mémorisée
   oracle: { briefing: boolean; sentinel: boolean; lastBriefing?: string; lastSentinel?: string };
   llm: {
-    provider: 'gemini';
+    provider: 'gemini' | 'groq';
     apiKey: string; // clé personnelle de l'utilisateur, gratuite, stockée en local uniquement
     model: string;
     tone: 'chaleureux' | 'direct' | 'motivant';
@@ -175,6 +185,20 @@ export interface Profile {
     done: boolean;
     goal?: string; // objectif de discipline choisi
     rhythm?: string; // rythme de vie choisi
+  };
+  pomodoro: {
+    workMin: number;
+    breakMin: number;
+    longBreakMin: number;
+    longBreakEvery: number; // toutes les N sessions de travail
+  };
+  cloudSync: {
+    enabled: boolean;
+    url: string; // URL du projet Supabase de l'utilisateur
+    anonKey: string; // clé publique "anon" du projet (sûre à stocker, protégée par RLS)
+    autoSync: boolean;
+    lastSyncAt?: number; // horodatage de la dernière sauvegarde envoyée
+    lastRemoteUpdatedAt?: number; // horodatage connu de la dernière sauvegarde distante
   };
   lastPerfectDay?: string; // dernière journée parfaite comptée (YYYY-MM-DD)
   history: Record<string, number>; // YYYY-MM-DD -> XP gagné ce jour-là

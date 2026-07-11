@@ -8,9 +8,12 @@ interface LennyxWidgetPlugin {
   update(options: {
     name: string;
     level: number;
+    rank: string;
+    xpPercent: number;
     stepsToday: number;
     stepsGoal: number;
     streak: number;
+    pending: number;
     nextAlarm: string;
   }): Promise<void>;
 }
@@ -20,9 +23,12 @@ const LennyxWidget = registerPlugin<LennyxWidgetPlugin>('LennyxWidget');
 export function pushWidgetData(data: {
   name: string;
   level: number;
+  rank: string;
+  xpPercent: number;
   stepsToday: number;
   stepsGoal: number;
   streak: number;
+  pending: number;
   nextAlarm: string;
 }) {
   if (!Capacitor.isNativePlatform()) return;
