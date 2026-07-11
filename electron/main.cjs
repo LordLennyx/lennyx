@@ -99,6 +99,55 @@ ipcMain.handle('lennyx-sync-start', async (_e, payload) => startSyncServer(paylo
 ipcMain.handle('lennyx-sync-stop', async () => { stopSyncServer(); return true; });
 ipcMain.handle('lennyx-sync-update', async (_e, payload) => { syncPayload = payload; return true; });
 
+// ── Proxy vers l'Oracle en ligne (contourne le CORS, aucune restriction côté Node) ──
+ipcMain.handle('lennyx-llm-request', async (_e, { url, body }) => {
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    const text = await res.text();
+    return { ok: res.ok, status: res.status, text };
+  } catch (e) {
+    return { ok: false, status: 0, text: String(e && e.message ? e.message : e) };
+  }
+});
+
+// ── Widget flottant (le "L" majestueux toujours visible sur le bureau) ─────
+let widgetWin = null;
+
+function createWidgetWindow() {
+  if (widgetWin) { widgetWin.show(); widgetWin.focus(); return; }
+  widgetWin = new BrowserWindow({
+    width: 220,
+    height: 130,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.cjs'),
+    },
+  });
+  widgetWin.setAlwaysOnTop(true, 'screen-saver');
+  widgetWin.loadFile(path.join(__dirname, '..', 'dist', 'index.html'), { search: 'widget=1' });
+  widgetWin.on('closed', () => { widgetWin = null; });
+}
+
+ipcMain.handle('lennyx-widget-toggle', async () => {
+  if (widgetWin) { widgetWin.close(); widgetWin = null; return false; }
+  createWidgetWindow();
+  return true;
+});
+ipcMain.handle('lennyx-widget-open-app', async () => {
+  if (win) { win.show(); win.focus(); }
+  else createWindow();
+});
+ipcMain.handle('lennyx-widget-hide', async () => {
+  if (widgetWin) { widgetWin.close(); widgetWin = null; }
+});
+
 // ── Fenêtre ───────────────────────────────────────────────────────────────
 function createWindow() {
   win = new BrowserWindow({
@@ -129,5 +178,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   stopSyncServer();
+  if (widgetWin) { widgetWin.close(); widgetWin = null; }
   if (process.platform !== 'darwin') app.quit();
 });

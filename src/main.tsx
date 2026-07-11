@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import WidgetView from './components/WidgetView';
 import '@fontsource/cinzel/400.css';
 import '@fontsource/cinzel/600.css';
 import '@fontsource/cinzel/700.css';
@@ -10,9 +11,12 @@ import '@fontsource/manrope/700.css';
 import '@fontsource/manrope/800.css';
 import './styles/global.css';
 
+// Fenêtre widget flottante (Windows) : même bundle, vue compacte en lecture seule.
+const isWidget = new URLSearchParams(window.location.search).get('widget') === '1';
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    {isWidget ? <WidgetView /> : <App />}
   </React.StrictMode>,
 );
 

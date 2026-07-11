@@ -1,32 +1,68 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { Icon } from '../components/Icon';
+import { speak, stopSpeaking } from '../lib/voice';
+import { useOnlineStatus } from '../lib/net';
 
-const SUGGESTIONS = ['Bilan', 'Génère ma journée', 'Conseil', 'Que me reste-t-il ?', 'Aide'];
+const SUGGESTIONS = ['Bilan', 'Génère ma journée', 'Journée sportive et créative', 'Défie-moi', 'Que me manque-t-il ?', 'Aide'];
 
 export default function OraclePage() {
   const messages = useStore((s) => s.oracleMessages);
   const oracleSend = useStore((s) => s.oracleSend);
   const oracleClear = useStore((s) => s.oracleClear);
   const oracle = useStore((s) => s.profile.oracle);
+  const oracleThinking = useStore((s) => s.oracleThinking);
+  const cloudOn = useStore((s) => !!s.profile.llm.apiKey.trim());
+  const voice = useStore((s) => s.profile.voice);
+  const setVoice = useStore((s) => s.setVoice);
   const setOracleOption = useStore((s) => s.setOracleOption);
+  const online = useOnlineStatus();
   const [input, setInput] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
+  const lastSpokenRef = useRef('');
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+    // lecture vocale de la dernière réponse de l'Oracle
+    const last = messages[messages.length - 1];
+    if (voice.spoken && last && last.role === 'oracle' && last.id !== lastSpokenRef.current) {
+      lastSpokenRef.current = last.id;
+      void speak(last.text, voice);
+    }
+  }, [messages, voice]);
+
+  useEffect(() => () => void stopSpeaking(), []);
 
   const send = (text: string) => {
-    oracleSend(text);
+    void oracleSend(text);
     setInput('');
   };
 
   return (
     <div>
-      <h2 className="page-title">L'Oracle</h2>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <h2 className="page-title">L'Oracle</h2>
+        <div className="row">
+          <span className="badge" title={cloudOn && online ? 'Connecté à Gemini' : cloudOn ? 'Hors-ligne : veille locale' : 'Mode local (aucune clé configurée)'}>
+            <Icon name={cloudOn && online ? 'sparkle' : 'eye'} size={12} style={{ color: cloudOn && online ? 'var(--gold)' : 'var(--muted)' }} />
+            {cloudOn && online ? 'En ligne' : cloudOn ? 'Veille locale' : 'Local'}
+          </span>
+          <button
+            className={`chip ${voice.spoken ? 'on' : ''}`}
+            onClick={() => {
+              if (voice.spoken) void stopSpeaking();
+              setVoice({ spoken: !voice.spoken });
+            }}
+            title="L'Oracle lit ses réponses à voix haute (voix réglable dans Réglages)"
+          >
+            <Icon name="sparkle" size={13} /> Voix {voice.spoken ? 'activée' : 'coupée'}
+          </button>
+        </div>
+      </div>
       <p className="page-sub">
-        Ton conseiller intégré — il vit dans l'application, hors ligne, et ne partage rien avec personne.
+        {cloudOn
+          ? 'Ton confident connecté — il te connaît par cœur et ne partage rien avec personne d’autre.'
+          : 'Analyste, devin et encyclopédie — configure une clé gratuite dans Réglages pour le rendre conversationnel.'}
       </p>
 
       <div className="card ornate">
@@ -41,6 +77,7 @@ export default function OraclePage() {
           {messages.map((m) => (
             <div key={m.id} className={`msg ${m.role}`}>{m.text}</div>
           ))}
+          {oracleThinking && <div className="msg oracle" style={{ opacity: 0.6 }}>…</div>}
           <div ref={endRef} />
         </div>
 
@@ -55,10 +92,11 @@ export default function OraclePage() {
             className="input grow"
             placeholder="Parle à l'Oracle…"
             value={input}
+            disabled={oracleThinking}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && input.trim() && send(input)}
           />
-          <button className="btn primary icon-only" style={{ padding: 11 }} disabled={!input.trim()} onClick={() => send(input)}>
+          <button className="btn primary icon-only" style={{ padding: 11 }} disabled={!input.trim() || oracleThinking} onClick={() => send(input)}>
             <Icon name="send" size={16} />
           </button>
         </div>

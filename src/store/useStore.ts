@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
   Quest, Daily, Profile, Toast, LevelUpInfo, SubQuest, OracleMessage, FxEvent, Counters,
+  TimeLogEntry, AlarmDef, NoteEntry, NoteKind, Transaction, TxType,
 } from '../game/types';
 import {
   DIFFICULTIES, MISS_PENALTY, RECORD_BONUS, PUNCTUAL_BONUS, LATE_FACTOR,
@@ -11,9 +12,12 @@ import {
 } from '../game/engine';
 import { levelFromXp } from '../game/xp';
 import { ACHIEVEMENTS, EFFECTS, SIGILS, THEMES, TITLES, unlocksAtLevel } from '../game/content';
-import { answer, briefing, dailiesAtRisk, type OracleAction } from '../game/oracle';
+import {
+  answer, briefing, dailiesAtRisk, suggestTemplates, tplRubriqueId,
+  type OracleAction, type OracleContext,
+} from '../game/oracle';
+import { askCloudOracle, OracleOfflineError } from '../lib/llmOracle';
 import type { TaskTemplate } from '../game/library';
-import { suggestTemplates } from '../game/oracle';
 import { playSound } from '../lib/sound';
 import { notifyNow } from '../lib/notify';
 
@@ -22,11 +26,15 @@ interface LennyxState {
   quests: Quest[];
   dailies: Daily[];
   oracleMessages: OracleMessage[];
+  timeLog: TimeLogEntry[];
+  notes: NoteEntry[];
+  transactions: Transaction[];
   lastReconcile: string;
   // éphémère (non persisté)
   toasts: Toast[];
   levelUp: LevelUpInfo | null;
   fxEvent: FxEvent | null;
+  oracleThinking: boolean;
 
   reconcile: () => void;
   fireFx: (x: number, y: number) => void;
@@ -44,7 +52,7 @@ interface LennyxState {
   deleteDaily: (id: string) => void;
   completeDaily: (id: string, at?: { x: number; y: number }) => void;
   addFromTemplate: (categoryId: string, tpl: TaskTemplate) => void;
-  oracleSend: (text: string) => void;
+  oracleSend: (text: string) => Promise<void>;
   oracleClear: () => void;
   setOracleOption: (key: 'briefing' | 'sentinel', value: boolean) => void;
   buyTheme: (id: string) => void;
@@ -61,7 +69,23 @@ interface LennyxState {
   toggleMotion: () => void;
   setAudio: (patch: Partial<Profile['audio']>) => void;
   setNotify: (patch: Partial<Profile['notify']>) => void;
+  setVoice: (patch: Partial<Profile['voice']>) => void;
   setSyncHost: (host: string) => void;
+  addSteps: (n: number) => void;
+  addManualSteps: (n: number) => void;
+  setStepsGoal: (n: number) => void;
+  logTime: (label: string, seconds: number, taskId?: string) => void;
+  deleteTimeLog: (id: string) => void;
+  setAlarm: (kind: 'wake' | 'lullaby', patch: Partial<AlarmDef>) => void;
+  setCustomAudioName: (name?: string) => void;
+  recordWake: () => void;
+  addNote: (kind: NoteKind, text: string) => void;
+  deleteNote: (id: string) => void;
+  addTransaction: (t: { type: TxType; label: string; amount: number; category?: string; date?: string }) => void;
+  deleteTransaction: (id: string) => void;
+  setLLM: (patch: Partial<Profile['llm']>) => void;
+  completeOnboarding: (data: { goal?: string; rhythm?: string; tone?: Profile['llm']['tone'] }) => void;
+  logBreathing: (seconds: number) => void;
   pushToast: (icon: string, text: string, kind?: Toast['kind']) => void;
   dismissToast: (id: string) => void;
   clearLevelUp: () => void;
@@ -72,6 +96,8 @@ interface LennyxState {
 const defaultCounters = (): Counters => ({
   quests: 0, events: 0, epics: 0, dailies: 0, subquests: 0,
   punctual: 0, late: 0, perfectDays: 0, generated: 0, oracleAsks: 0,
+  totalSteps: 0, chronoSessions: 0, chronoMinutes: 0, alarmsStopped: 0,
+  breathingSessions: 0, notesLogged: 0, accomplishments: 0, oracleCloudAsks: 0,
 });
 
 const defaultProfile = (): Profile => ({
@@ -98,10 +124,27 @@ const defaultProfile = (): Profile => ({
   soundOn: true,
   motionOn: true,
   audio: { volume: 0.7, music: true, mood: 'ether', musicVolume: 0.3 },
-  notify: { enabled: true, lead: 15, lastCall: true, briefingTime: '08:30', sentinelTime: '19:00', celebrate: true },
+  notify: {
+    enabled: true, lead: 15, lastCall: true, briefingTime: '08:30',
+    sentinelTime: '19:00', celebrate: true, intensity: 'normal',
+  },
+  voice: { spoken: false, voiceURI: '', rate: 1, pitch: 1 },
+  steps: { goal: 8000, counted: {}, manual: {}, bestDay: 0 },
+  alarms: {
+    wake: { on: false, time: '07:00', days: [], melody: 'aube', volume: 0.8 },
+    lullaby: { on: false, time: '22:30', days: [], melody: 'lune', volume: 0.4 },
+  },
+  wakeLog: {},
   oracle: { briefing: true, sentinel: true },
+  llm: { provider: 'gemini', apiKey: '', model: 'gemini-2.0-flash', tone: 'chaleureux' },
+  onboarding: { done: false },
   history: {},
 });
+
+/** Pas du jour (capteur + manuel). */
+export function stepsOn(p: Profile, date: string): number {
+  return (p.steps.counted[date] ?? 0) + (p.steps.manual[date] ?? 0);
+}
 
 /** Un effet est-il utilisable ? (gratuit niveau atteint, ou acheté) */
 export function effectAvailable(p: Profile, level: number, id: string): boolean {
@@ -113,6 +156,18 @@ export function effectAvailable(p: Profile, level: number, id: string): boolean 
 
 const MAX_TOASTS = 4;
 let fxSeq = 1;
+
+const oracleCtx = (s: {
+  profile: Profile; quests: Quest[]; dailies: Daily[]; timeLog: TimeLogEntry[];
+  notes: NoteEntry[]; transactions: Transaction[];
+}): OracleContext => ({
+  profile: s.profile,
+  quests: s.quests,
+  dailies: s.dailies,
+  timeLog: s.timeLog,
+  notes: s.notes,
+  transactions: s.transactions,
+});
 
 export const useStore = create<LennyxState>()(
   persist(
@@ -245,6 +300,8 @@ export const useStore = create<LennyxState>()(
         streak: 0,
         bestStreak: 0,
         completions: [],
+        times: {},
+        lateDates: [],
       });
 
       const makeQuest = (q: {
@@ -266,27 +323,60 @@ export const useStore = create<LennyxState>()(
 
       const applyOracleActions = (actions: OracleAction[]) => {
         for (const a of actions) {
-          if (a.kind === 'add-quest' && a.payload) {
+          if (a.kind === 'add-quest' && a.payload?.title) {
+            const p = a.payload;
             set((s) => ({
-              quests: [makeQuest({ ...a.payload!, type: a.payload!.isEvent ? 'event' : 'quest' }), ...s.quests],
+              quests: [
+                makeQuest({
+                  title: p.title!,
+                  difficulty: p.difficulty ?? 'normal',
+                  type: p.isEvent ? 'event' : 'quest',
+                }),
+                ...s.quests,
+              ],
             }));
-          } else if (a.kind === 'add-daily' && a.payload) {
-            set((s) => ({ dailies: [makeDaily(a.payload!), ...s.dailies] }));
+          } else if (a.kind === 'add-daily' && a.payload?.title) {
+            const p = a.payload;
+            set((s) => ({
+              dailies: [
+                makeDaily({
+                  title: p.title!,
+                  difficulty: p.difficulty ?? 'normal',
+                  days: p.days,
+                  timeLimit: p.timeLimit,
+                }),
+                ...s.dailies,
+              ],
+            }));
           } else if (a.kind === 'generate-day') {
             const s = get();
-            const sugg = suggestTemplates({ profile: s.profile, quests: s.quests, dailies: s.dailies }, 4);
-            const found = sugg.map((tpl) => {
-              const rub = tplRubrique(tpl);
-              return makeDaily({
-                title: tpl.title, description: tpl.desc, difficulty: tpl.difficulty,
-                category: rub, days: tpl.days, timeLimit: tpl.before,
-              });
-            });
+            const ctx = oracleCtx(s);
+            const rubs = a.payload?.rubriques;
+            const sugg = suggestTemplates(ctx, rubs ? Math.min(6, 2 + rubs.length * 2) : 4, rubs);
+            const newDailies: Daily[] = [];
+            const newQuests: Quest[] = [];
+            for (const tpl of sugg) {
+              const rub = tplRubriqueId(tpl);
+              if (tpl.kind === 'quest') {
+                newQuests.push(makeQuest({ title: tpl.title, description: tpl.desc, difficulty: tpl.difficulty, category: rub }));
+              } else {
+                newDailies.push(
+                  makeDaily({
+                    title: tpl.title, description: tpl.desc, difficulty: tpl.difficulty,
+                    category: rub, days: tpl.days, timeLimit: tpl.before,
+                  }),
+                );
+              }
+            }
             set((st) => ({
-              dailies: [...found, ...st.dailies],
+              dailies: [...newDailies, ...st.dailies],
+              quests: [...newQuests, ...st.quests],
               profile: {
                 ...st.profile,
-                counters: { ...st.profile.counters, generated: st.profile.counters.generated + found.length },
+                counters: {
+                  ...st.profile.counters,
+                  generated: st.profile.counters.generated + newDailies.length + newQuests.length,
+                },
               },
             }));
           }
@@ -298,10 +388,14 @@ export const useStore = create<LennyxState>()(
         quests: [],
         dailies: [],
         oracleMessages: [],
+        timeLog: [],
+        notes: [],
+        transactions: [],
         lastReconcile: todayStr(),
         toasts: [],
         levelUp: null,
         fxEvent: null,
+        oracleThinking: false,
 
         pushToast,
         dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
@@ -345,13 +439,13 @@ export const useStore = create<LennyxState>()(
           // Briefing quotidien de l'Oracle
           const st = get();
           if (st.profile.oracle.briefing && st.profile.oracle.lastBriefing !== t) {
-            oracleSay(briefing({ profile: st.profile, quests: st.quests, dailies: st.dailies }));
+            oracleSay(briefing(oracleCtx(st)));
             set((x) => ({ profile: { ...x.profile, oracle: { ...x.profile.oracle, lastBriefing: t } } }));
           }
           // Sentinelle du soir : streaks en danger
           const hour = new Date().getHours();
           if (st.profile.oracle.sentinel && hour >= 18 && st.profile.oracle.lastSentinel !== t) {
-            const risk = dailiesAtRisk({ profile: st.profile, quests: st.quests, dailies: st.dailies });
+            const risk = dailiesAtRisk(oracleCtx(st));
             if (risk.length > 0) {
               pushToast('eye', `L'Oracle veille : ${risk.length} quotidienne(s) encore en attente ce soir`, 'warn');
               set((x) => ({ profile: { ...x.profile, oracle: { ...x.profile.oracle, lastSentinel: t } } }));
@@ -479,6 +573,7 @@ export const useStore = create<LennyxState>()(
                 : `+${xp} XP · +${gold} or · streak ×${streak}${daily.timeLimit ? ' · à l’heure' : ''}`,
             !onTime ? 'warn' : 'xp',
           );
+          const nowHM = new Date().toTimeString().slice(0, 5);
           const dailies = s.dailies.map((d) =>
             d.id === id
               ? {
@@ -487,6 +582,8 @@ export const useStore = create<LennyxState>()(
                   bestStreak: Math.max(d.bestStreak, streak),
                   lastCompletedDate: t,
                   completions: [...d.completions, t].slice(-400),
+                  times: { ...(d.times ?? {}), [t]: nowHM },
+                  lateDates: !onTime ? [...(d.lateDates ?? []), t].slice(-200) : (d.lateDates ?? []),
                 }
               : d,
           );
@@ -530,7 +627,7 @@ export const useStore = create<LennyxState>()(
         },
 
         // ── Oracle ───────────────────────────────────────────────────────
-        oracleSend: (text) => {
+        oracleSend: async (text) => {
           const trimmed = text.trim();
           if (!trimmed) return;
           const userMsg: OracleMessage = { id: uid(), role: 'user', text: trimmed, ts: Date.now() };
@@ -539,10 +636,45 @@ export const useStore = create<LennyxState>()(
             profile: { ...s.profile, counters: { ...s.profile.counters, oracleAsks: s.profile.counters.oracleAsks + 1 } },
           }));
           const s = get();
-          const reply = answer(trimmed, { profile: s.profile, quests: s.quests, dailies: s.dailies });
-          if (reply.actions) applyOracleActions(reply.actions);
-          oracleSay(reply.text);
-          playSound('oracle', s.profile.soundOn);
+          const ctx = oracleCtx(s);
+          const hasKey = !!s.profile.llm.apiKey.trim();
+
+          if (hasKey) {
+            set({ oracleThinking: true });
+            try {
+              const history = s.oracleMessages.slice(-10);
+              const cloud = await askCloudOracle(trimmed, ctx, history);
+              if (cloud.actions) applyOracleActions(cloud.actions);
+              oracleSay(cloud.text);
+              playSound('oracle', s.profile.soundOn);
+              set((st) => ({
+                profile: checkAchievements({
+                  ...st.profile,
+                  counters: { ...st.profile.counters, oracleCloudAsks: st.profile.counters.oracleCloudAsks + 1 },
+                }),
+              }));
+            } catch (e) {
+              // Mode hors-ligne résilient : l'Oracle bascule poliment en local, sans jamais bloquer.
+              const local = answer(trimmed, ctx);
+              if (local.actions) applyOracleActions(local.actions);
+              const isOffline = e instanceof OracleOfflineError;
+              oracleSay(
+                (isOffline
+                  ? "Je suis en veille locale — la connexion me manque pour l'instant. "
+                  : `Un souci m'empêche de joindre le ciel (${e instanceof Error ? e.message : 'erreur inconnue'}). `) +
+                  local.text,
+              );
+              playSound('oracle', s.profile.soundOn);
+              if (!isOffline) pushToast('warning', "L'Oracle en ligne est indisponible pour l'instant", 'warn');
+            } finally {
+              set({ oracleThinking: false });
+            }
+          } else {
+            const reply = answer(trimmed, ctx);
+            if (reply.actions) applyOracleActions(reply.actions);
+            oracleSay(reply.text);
+            playSound('oracle', s.profile.soundOn);
+          }
           set((st) => ({ profile: checkAchievements(st.profile) }));
         },
         oracleClear: () => set({ oracleMessages: [] }),
@@ -631,6 +763,162 @@ export const useStore = create<LennyxState>()(
             const level = levelFromXp(s.profile.xp).level;
             return effectAvailable(s.profile, level, id) ? { profile: { ...s.profile, burstFx: id } } : s;
           }),
+        // ── Podomètre ────────────────────────────────────────────────────
+        addSteps: (n) => {
+          if (n <= 0) return;
+          const s = get();
+          const t = todayStr();
+          const counted = { ...s.profile.steps.counted, [t]: (s.profile.steps.counted[t] ?? 0) + n };
+          // borne l'historique à 90 jours
+          for (const k of Object.keys(counted)) if (k < addDays(t, -90)) delete counted[k];
+          const today = (counted[t] ?? 0) + (s.profile.steps.manual[t] ?? 0);
+          set({
+            profile: checkAchievements({
+              ...s.profile,
+              steps: { ...s.profile.steps, counted, bestDay: Math.max(s.profile.steps.bestDay, today) },
+              counters: { ...s.profile.counters, totalSteps: s.profile.counters.totalSteps + n },
+            }),
+          });
+        },
+        addManualSteps: (n) => {
+          if (n <= 0) return;
+          const s = get();
+          const t = todayStr();
+          const manual = { ...s.profile.steps.manual, [t]: (s.profile.steps.manual[t] ?? 0) + n };
+          for (const k of Object.keys(manual)) if (k < addDays(t, -90)) delete manual[k];
+          const today = (s.profile.steps.counted[t] ?? 0) + (manual[t] ?? 0);
+          pushToast('heart', `+${n} pas ajoutés`, 'info');
+          set({
+            profile: checkAchievements({
+              ...s.profile,
+              steps: { ...s.profile.steps, manual, bestDay: Math.max(s.profile.steps.bestDay, today) },
+              counters: { ...s.profile.counters, totalSteps: s.profile.counters.totalSteps + n },
+            }),
+          });
+        },
+        setStepsGoal: (n) =>
+          set((s) => ({ profile: { ...s.profile, steps: { ...s.profile.steps, goal: Math.max(1000, n) } } })),
+
+        // ── Chronomètre ──────────────────────────────────────────────────
+        logTime: (label, seconds, taskId) => {
+          if (seconds < 5) return;
+          const s = get();
+          const entry: TimeLogEntry = {
+            id: uid(),
+            label: label.trim() || 'Session',
+            taskId,
+            date: todayStr(),
+            startedAt: new Date(Date.now() - seconds * 1000).toTimeString().slice(0, 5),
+            seconds: Math.round(seconds),
+          };
+          const minutes = Math.floor(seconds / 60);
+          let profile = {
+            ...s.profile,
+            counters: {
+              ...s.profile.counters,
+              chronoSessions: s.profile.counters.chronoSessions + 1,
+              chronoMinutes: s.profile.counters.chronoMinutes + minutes,
+            },
+          };
+          // une session soutenue (≥ 10 min) mérite de l'XP : 1 XP / 2 min, plafonné à 30
+          if (minutes >= 10) {
+            const xp = Math.min(30, Math.round(minutes / 2));
+            profile = grantXp(profile, xp);
+            playSound('complete', profile.soundOn);
+            pushToast('hourglass', `Session « ${entry.label} » : ${minutes} min · +${xp} XP`, 'xp');
+          } else {
+            pushToast('hourglass', `Session « ${entry.label} » : ${Math.round(seconds)} s enregistrée`, 'info');
+          }
+          profile = checkAchievements(profile);
+          set({ profile, timeLog: [entry, ...s.timeLog].slice(0, 500) });
+        },
+        deleteTimeLog: (id) => set((s) => ({ timeLog: s.timeLog.filter((e) => e.id !== id) })),
+
+        // ── Alarmes ──────────────────────────────────────────────────────
+        setAlarm: (kind, patch) =>
+          set((s) => ({
+            profile: { ...s.profile, alarms: { ...s.profile.alarms, [kind]: { ...s.profile.alarms[kind], ...patch } } },
+          })),
+        setCustomAudioName: (name) =>
+          set((s) => ({ profile: { ...s.profile, alarms: { ...s.profile.alarms, customAudioName: name } } })),
+        recordWake: () => {
+          const s = get();
+          const t = todayStr();
+          if (s.profile.wakeLog[t]) return;
+          const wakeLog = { ...s.profile.wakeLog, [t]: new Date().toTimeString().slice(0, 5) };
+          for (const k of Object.keys(wakeLog)) if (k < addDays(t, -90)) delete wakeLog[k];
+          set({
+            profile: checkAchievements({
+              ...s.profile,
+              wakeLog,
+              counters: { ...s.profile.counters, alarmsStopped: s.profile.counters.alarmsStopped + 1 },
+            }),
+          });
+        },
+
+        // ── Notes & traces de vie ──────────────────────────────────────────
+        addNote: (kind, text) => {
+          if (!text.trim()) return;
+          const s = get();
+          const entry: NoteEntry = { id: uid(), kind, text: text.trim(), date: todayStr(), ts: Date.now() };
+          let profile = s.profile;
+          if (kind === 'accomplishment') {
+            profile = { ...profile, counters: { ...profile.counters, accomplishments: profile.counters.accomplishments + 1 } };
+            // petite XP pour renforcer l'habitude, plafonnée par jour via le combo naturel
+            const level = levelFromXp(profile.xp).level;
+            profile = grantXp(profile, scaledXp(5, level));
+            playSound('complete', profile.soundOn);
+            pushToast('star', 'Victoire consignée : +5 XP', 'xp');
+          } else {
+            profile = { ...profile, counters: { ...profile.counters, notesLogged: profile.counters.notesLogged + 1 } };
+            pushToast('quill', kind === 'resolution' ? 'Résolution notée' : 'Note enregistrée', 'info');
+          }
+          profile = checkAchievements(profile);
+          set({ profile, notes: [entry, ...s.notes].slice(0, 1000) });
+        },
+        deleteNote: (id) => set((s) => ({ notes: s.notes.filter((n) => n.id !== id) })),
+
+        addTransaction: (t) => {
+          if (!t.label.trim() || t.amount <= 0) return;
+          const tx: Transaction = {
+            id: uid(), type: t.type, label: t.label.trim(), amount: Math.round(t.amount * 100) / 100,
+            category: t.category, date: t.date ?? todayStr(),
+          };
+          set((s) => ({ transactions: [tx, ...s.transactions].slice(0, 3000) }));
+        },
+        deleteTransaction: (id) => set((s) => ({ transactions: s.transactions.filter((t) => t.id !== id) })),
+
+        setLLM: (patch) => set((s) => ({ profile: { ...s.profile, llm: { ...s.profile.llm, ...patch } } })),
+        completeOnboarding: (data) =>
+          set((s) => ({
+            profile: {
+              ...s.profile,
+              onboarding: { done: true, goal: data.goal, rhythm: data.rhythm },
+              llm: { ...s.profile.llm, tone: data.tone ?? s.profile.llm.tone },
+              notify: {
+                ...s.profile.notify,
+                intensity: data.tone === 'motivant' ? 'duolingo' : s.profile.notify.intensity,
+              },
+            },
+          })),
+
+        logBreathing: (seconds) => {
+          const s = get();
+          const minutes = Math.max(1, Math.round(seconds / 60));
+          let profile = {
+            ...s.profile,
+            counters: { ...s.profile.counters, breathingSessions: s.profile.counters.breathingSessions + 1 },
+          };
+          const xp = Math.min(15, minutes * 3);
+          profile = grantXp(profile, xp);
+          playSound('perfect', profile.soundOn);
+          pushToast('sparkle', `Séance de respiration : +${xp} XP`, 'xp');
+          profile = checkAchievements(profile);
+          set({ profile });
+        },
+
+        setVoice: (patch) => set((s) => ({ profile: { ...s.profile, voice: { ...s.profile.voice, ...patch } } })),
+
         setName: (name) => set((s) => ({ profile: { ...s.profile, name: name.trim() || 'Aventurier' } })),
         toggleSound: () => set((s) => ({ profile: { ...s.profile, soundOn: !s.profile.soundOn } })),
         toggleMotion: () => set((s) => ({ profile: { ...s.profile, motionOn: !s.profile.motionOn } })),
@@ -641,7 +929,8 @@ export const useStore = create<LennyxState>()(
         resetAll: () =>
           set({
             profile: defaultProfile(), quests: [], dailies: [],
-            oracleMessages: [], lastReconcile: todayStr(),
+            oracleMessages: [], timeLog: [], notes: [], transactions: [],
+            lastReconcile: todayStr(),
           }),
 
         importSave: (json) => {
@@ -649,10 +938,18 @@ export const useStore = create<LennyxState>()(
             const data = JSON.parse(json);
             if (!data.profile || !Array.isArray(data.quests) || !Array.isArray(data.dailies)) return false;
             set({
-              profile: { ...defaultProfile(), ...data.profile, counters: { ...defaultCounters(), ...data.profile.counters } },
+              profile: {
+                ...defaultProfile(), ...data.profile,
+                counters: { ...defaultCounters(), ...data.profile.counters },
+                llm: { ...defaultProfile().llm, ...data.profile.llm },
+                onboarding: { ...defaultProfile().onboarding, ...data.profile.onboarding },
+              },
               quests: data.quests,
-              dailies: data.dailies,
+              dailies: data.dailies.map((d: Daily) => ({ ...d, times: d.times ?? {}, lateDates: d.lateDates ?? [] })),
               oracleMessages: data.oracleMessages ?? [],
+              timeLog: data.timeLog ?? [],
+              notes: data.notes ?? [],
+              transactions: data.transactions ?? [],
               lastReconcile: data.lastReconcile ?? todayStr(),
             });
             return true;
@@ -664,12 +961,15 @@ export const useStore = create<LennyxState>()(
     },
     {
       name: 'lennyx-save',
-      version: 3,
+      version: 5,
       partialize: (s) => ({
         profile: s.profile,
         quests: s.quests,
         dailies: s.dailies,
         oracleMessages: s.oracleMessages,
+        timeLog: s.timeLog,
+        notes: s.notes,
+        transactions: s.transactions,
         lastReconcile: s.lastReconcile,
       }),
       migrate: (persisted: unknown, version: number) => {
@@ -708,15 +1008,48 @@ export const useStore = create<LennyxState>()(
             notify: { ...def.notify, ...data.profile.notify },
           };
         }
+        if (version < 4 && data?.profile) {
+          // v4 : voix, podomètre, alarmes, journal de réveil, chrono, intensité
+          const def = defaultProfile();
+          data.profile = {
+            ...def,
+            ...data.profile,
+            audio: { ...def.audio, ...data.profile.audio },
+            notify: { ...def.notify, ...data.profile.notify },
+            voice: { ...def.voice, ...data.profile.voice },
+            steps: { ...def.steps, ...data.profile.steps },
+            alarms: {
+              wake: { ...def.alarms.wake, ...data.profile.alarms?.wake },
+              lullaby: { ...def.alarms.lullaby, ...data.profile.alarms?.lullaby },
+              customAudioName: data.profile.alarms?.customAudioName,
+            },
+            wakeLog: data.profile.wakeLog ?? {},
+            counters: { ...defaultCounters(), ...data.profile.counters },
+          };
+          data.dailies = (data.dailies ?? []).map((d: Daily) => ({
+            ...d,
+            times: d.times ?? {},
+            lateDates: d.lateDates ?? [],
+          }));
+          data.timeLog = data.timeLog ?? [];
+        }
+        if (version < 5 && data?.profile) {
+          // v5 : Oracle en ligne (LLM), onboarding, notes & finances
+          const def = defaultProfile();
+          data.profile = {
+            ...def,
+            ...data.profile,
+            counters: { ...defaultCounters(), ...data.profile.counters },
+            llm: { ...def.llm, ...data.profile.llm },
+            // les utilisateurs déjà installés ont fait leurs preuves : pas de tutoriel forcé
+            onboarding: { done: true, ...data.profile.onboarding },
+          };
+          data.notes = data.notes ?? [];
+          data.transactions = data.transactions ?? [];
+        }
         return data as any;
       },
     },
   ),
 );
 
-// petite aide : retrouver la rubrique d'un template (import circulaire évité)
-import { LIBRARY } from '../game/library';
-function tplRubrique(tpl: TaskTemplate): string | undefined {
-  for (const r of LIBRARY) if (r.templates.includes(tpl)) return r.id;
-  return undefined;
-}

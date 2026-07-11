@@ -81,6 +81,10 @@ const SIGILS: Record<string, ReactNode> = {
   'sigil-phoenix': (<><path d="M12 22c-4-2-6-5.5-6-9.5C6 8 8.5 4.5 12 2c3.5 2.5 6 6 6 10.5 0 4-2 7.5-6 9.5z" /><path d="M12 22V9m0 4l-3.5-3M12 13l3.5-3" /></>),
   'sigil-infinity': P('M12 12c-2-2.7-3.5-4-5.5-4a4 4 0 0 0 0 8c2 0 3.5-1.3 5.5-4zm0 0c2 2.7 3.5 4 5.5 4a4 4 0 0 0 0-8c-2 0-3.5 1.3-5.5 4z'),
   'sigil-master': (<><circle cx="12" cy="12" r="9" /><path d="M12 3v18M3 12h18" /><circle cx="12" cy="12" r="4" /><path d="M8.8 8.8l6.4 6.4m0-6.4l-6.4 6.4" /></>),
+  'sigil-heart': (<><path d="M12 20s-8-4.5-8-10.3C4 6.5 6 4.5 8.5 4.5c1.7 0 3 1 3.5 2 .5-1 1.8-2 3.5-2C18 4.5 20 6.5 20 9.7 20 15.5 12 20 12 20z" /><path d="M12 6.5v4m-2-2h4" /></>),
+  'sigil-comet': (<><circle cx="16.5" cy="7.5" r="3.5" /><path d="M13 11L4 20m8.5-5.5L7 20m9-4.5L12.5 19" /></>),
+  'sigil-gate': (<><path d="M3 6c3-1.5 15-1.5 18 0M5 5.5V4m14 1.5V4M6 6v14m12-14v14M4 20h16M6 11h12" /></>),
+  'sigil-cosmos': (<><circle cx="12" cy="12" r="2" /><ellipse cx="12" cy="12" rx="9" ry="3.5" /><ellipse cx="12" cy="12" rx="9" ry="3.5" transform="rotate(60 12 12)" /><ellipse cx="12" cy="12" rx="9" ry="3.5" transform="rotate(-60 12 12)" /></>),
 };
 
 export function Icon({

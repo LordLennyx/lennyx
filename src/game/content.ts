@@ -98,6 +98,37 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'collect-themes12', name: 'Mécène', desc: 'Posséder 12 thèmes', icon: 'palette', gold: 400, check: (p) => p.ownedThemes.length >= 12 },
   { id: 'collect-sigils8', name: 'Héraldiste', desc: 'Posséder 8 sigils', icon: 'sigil-knot', gold: 150, check: (p) => p.ownedSigils.length >= 8 },
   { id: 'collect-titles5', name: 'Homme aux mille noms', desc: 'Posséder 5 titres', icon: 'quill', gold: 150, check: (p) => p.ownedTitles.length >= 5 },
+  // — Podomètre —
+  { id: 'steps5k', name: 'Marcheur', desc: '5 000 pas en une journée', icon: 'heart', gold: 30, check: (p) => p.steps.bestDay >= 5000 },
+  { id: 'steps10k', name: 'Arpenteur', desc: '10 000 pas en une journée', icon: 'heart', gold: 80, check: (p) => p.steps.bestDay >= 10000 },
+  { id: 'steps20k', name: 'Vagabond céleste', desc: '20 000 pas en une journée', icon: 'map', gold: 200, check: (p) => p.steps.bestDay >= 20000 },
+  { id: 'steps100k', name: 'Pèlerin', desc: '100 000 pas cumulés', icon: 'map', gold: 150, check: c('totalSteps', 100000) },
+  { id: 'steps1m', name: 'Traverseur de mondes', desc: '1 000 000 de pas cumulés', icon: 'laurel', gold: 1000, check: c('totalSteps', 1000000) },
+  // — Chronomètre —
+  { id: 'chrono1', name: 'Contre la montre', desc: 'Terminer une session chronométrée', icon: 'hourglass', gold: 15, check: c('chronoSessions', 1) },
+  { id: 'chrono25', name: 'Maître des sabliers', desc: '25 sessions chronométrées', icon: 'hourglass', gold: 100, check: c('chronoSessions', 25) },
+  { id: 'chrono100', name: 'Seigneur des instants', desc: '100 sessions chronométrées', icon: 'hourglass', gold: 300, check: c('chronoSessions', 100) },
+  { id: 'chrono1000m', name: 'Mille minutes maîtrisées', desc: '1 000 minutes chronométrées', icon: 'clock', gold: 250, check: c('chronoMinutes', 1000) },
+  // — Alarmes & réveils —
+  { id: 'wake1', name: 'Debout, soldat', desc: 'Arrêter ton premier réveil Lennyx', icon: 'sun', gold: 15, check: c('alarmsStopped', 1) },
+  { id: 'wake30', name: 'Aube conquise', desc: '30 réveils arrêtés', icon: 'sun', gold: 150, check: c('alarmsStopped', 30) },
+  { id: 'wake100', name: 'Maître des matins', desc: '100 réveils arrêtés', icon: 'sun', gold: 400, check: c('alarmsStopped', 100) },
+  // — Oracle & bibliothèque, suite —
+  { id: 'oracle200', name: 'Âme sœur de l’Oracle', desc: '200 échanges avec l’Oracle', icon: 'eye', gold: 400, check: c('oracleAsks', 200) },
+  { id: 'gen100', name: 'Seigneur du grimoire', desc: '100 tâches créées depuis la bibliothèque', icon: 'book', gold: 300, check: c('generated', 100) },
+  { id: 'rich20000', name: 'Dragon sur son trésor', desc: 'Posséder 20 000 pièces d’or', icon: 'coin', gold: 0, check: (p) => p.gold >= 20000 },
+  { id: 'collect-titles12', name: 'Légion de noms', desc: 'Posséder 12 titres', icon: 'quill', gold: 400, check: (p) => p.ownedTitles.length >= 12 },
+  { id: 'cat18', name: 'Vie totale', desc: 'Accomplir des tâches dans les 18 rubriques', icon: 'grid', gold: 600, check: (p) => Object.keys(p.categories).length >= 18 },
+  // — Notes, finances & respiration (v0.5) —
+  { id: 'note1', name: 'Esprit vidé', desc: 'Écrire ta première note ou résolution', icon: 'quill', gold: 15, check: c('notesLogged', 1) },
+  { id: 'note50', name: 'Chroniqueur', desc: '50 notes ou résolutions écrites', icon: 'quill', gold: 150, check: c('notesLogged', 50) },
+  { id: 'win1', name: 'Petite victoire', desc: 'Consigner ton premier accomplissement', icon: 'star', gold: 15, check: c('accomplishments', 1) },
+  { id: 'win30', name: 'Palmarès', desc: '30 accomplissements consignés', icon: 'star', gold: 200, check: c('accomplishments', 30) },
+  { id: 'win100', name: 'Vie de conquêtes', desc: '100 accomplissements consignés', icon: 'laurel', gold: 500, check: c('accomplishments', 100) },
+  { id: 'breath1', name: 'Premier souffle', desc: 'Terminer une séance de respiration', icon: 'sparkle', gold: 15, check: c('breathingSessions', 1) },
+  { id: 'breath30', name: 'Esprit apaisé', desc: '30 séances de respiration', icon: 'sparkle', gold: 180, check: c('breathingSessions', 30) },
+  { id: 'oraclecloud1', name: 'Premier contact céleste', desc: "Consulter l'Oracle en ligne", icon: 'eye', gold: 20, check: c('oracleCloudAsks', 1) },
+  { id: 'oraclecloud100', name: 'Confident céleste', desc: "100 échanges avec l'Oracle en ligne", icon: 'eye', gold: 300, check: c('oracleCloudAsks', 100) },
 ];
 
 // ═══════════════════════════ THÈMES (19) ═════════════════════════════════
@@ -137,6 +168,11 @@ export const THEMES: ThemeItem[] = [
   { id: 'solar', name: 'Couronne solaire', price: 1000, unlockLevel: 30, vars: { ...dark('#0c0903', '#151006', '#1e170a', '#332813'), accent: '#fbbf24', accent2: '#fff7d6', gold: '#ffd700' } },
   { id: 'vantablack', name: 'Vantablack', price: 1500, unlockLevel: 40, vars: { bg: '#000000', panel: '#080808', panel2: '#0f0f0f', border: '#1f1f1f', text: '#efece4', muted: '#6f6c66', accent: '#c9a227', accent2: '#efece4', gold: '#c9a227' } },
   { id: 'prism', name: 'Prisme', price: 2500, unlockLevel: 50, vars: { ...dark('#08080e', '#101018', '#171724', '#252538'), accent: '#a78bfa', accent2: '#22d3ee', gold: '#f0c33c' } },
+  { id: 'rosenoir', name: 'Rose noire', price: 4000, unlockLevel: 55, vars: { ...dark('#0c070a', '#140b10', '#1d1017', '#301a26'), accent: '#f472b6', accent2: '#9d7bd8', gold: '#e8c06a' } },
+  { id: 'empyree', name: 'Empyrée', price: 8000, unlockLevel: 65, vars: { bg: '#060810', panel: '#0c1020', panel2: '#121830', border: '#20294a', text: '#f0ecf9', muted: '#8d92b3', accent: '#f4dd8c', accent2: '#8fb8ff', gold: '#ffd700' } },
+  { id: 'eclipse', name: 'Éclipse totale', price: 15000, unlockLevel: 75, vars: { bg: '#020203', panel: '#0a0a0c', panel2: '#111114', border: '#222228', text: '#f5f2ea', muted: '#77736b', accent: '#ff8c42', accent2: '#c9a227', gold: '#ffb347' } },
+  // ── L'article ultime du catalogue : réservé aux fortunes de légende ──
+  { id: 'trone', name: 'Trône Céleste', price: 250000, unlockLevel: 100, vars: { bg: '#0a0805', panel: '#141008', panel2: '#1e180c', border: '#3d3114', text: '#fdf6e3', muted: '#a89868', accent: '#ffd700', accent2: '#fff7d6', gold: '#ffe066' } },
 ];
 
 // ═══════════════════════════ SIGILS (18) ═════════════════════════════════
@@ -168,6 +204,10 @@ export const SIGILS: SigilItem[] = [
   { id: 'sigil-phoenix', name: 'Phénix', price: 1200, unlockLevel: 45 },
   { id: 'sigil-infinity', name: 'Infini', price: 1600, unlockLevel: 60 },
   { id: 'sigil-master', name: 'Sceau du Maître', price: 2500, unlockLevel: 80 },
+  { id: 'sigil-heart', name: 'Cœur ardent', price: 3500, unlockLevel: 40 },
+  { id: 'sigil-comet', name: 'Comète', price: 5000, unlockLevel: 55 },
+  { id: 'sigil-gate', name: 'Porte des mondes', price: 12000, unlockLevel: 70 },
+  { id: 'sigil-cosmos', name: 'Cosmos', price: 30000, unlockLevel: 90 },
 ];
 
 // ═══════════════════════════ TITRES (26) ═════════════════════════════════
@@ -206,6 +246,15 @@ export const TITLES: TitleItem[] = [
   { id: 'demiurge', label: 'le Démiurge', price: 3000, unlockLevel: 90 },
   { id: 'eternel', label: 'l’Éternel', price: 4000, unlockLevel: 100 },
   { id: 'taskmaster', label: 'TaskMaster', price: 5000, unlockLevel: 100 },
+  { id: 'ponctuel', label: 'le Ponctuel', price: 350 },
+  { id: 'marcheur', label: 'Marcheur Infatigable', price: 600 },
+  { id: 'chronomaitre', label: 'Maître du Chrono', price: 700 },
+  { id: 'aube', label: 'Gardien de l’Aube', price: 900, unlockLevel: 20 },
+  { id: 'coeur-vaillant', label: 'au Cœur Vaillant', price: 1100, unlockLevel: 25 },
+  { id: 'oracle-incarne', label: 'l’Oracle Incarné', price: 2500, unlockLevel: 50 },
+  { id: 'mythe', label: 'le Mythe Vivant', price: 8000, unlockLevel: 75 },
+  // ── L'avant-dernier article : un nom que peu porteront ──
+  { id: 'souverain', label: 'Souverain de Lennyx', price: 100000, unlockLevel: 95 },
 ];
 
 // ═══════════════════════════ EFFETS ══════════════════════════════════════

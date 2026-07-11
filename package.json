@@ -1,7 +1,7 @@
 {
   "name": "lennyx",
   "productName": "Lennyx",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "Lennyx — la to-do list gamifiée. Transforme tes tâches en quêtes épiques.",
   "author": "Lens Daniels <lensdaniels237@gmail.com>",
   "private": true,
@@ -16,8 +16,10 @@
     "android:sync": "npm run build && npx cap sync android"
   },
   "dependencies": {
+    "@capacitor-community/text-to-speech": "^6.1.0",
     "@capacitor/core": "^7.6.7",
     "@capacitor/local-notifications": "^7.0.7",
+    "@capacitor/motion": "^7.0.3",
     "@fontsource/cinzel": "^5.2.8",
     "@fontsource/manrope": "^5.2.8",
     "qrcode": "^1.5.4",

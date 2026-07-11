@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { Icon } from '../components/Icon';
 import SyncSection from '../components/SyncSection';
 import { ensurePermission, permissionState, isNative } from '../lib/notify';
 import { playSound } from '../lib/sound';
 import type { MusicMood } from '../lib/music';
+import { listVoices, speak, type VoiceOption } from '../lib/voice';
+import { GEMINI_MODELS } from '../lib/llmOracle';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -22,9 +24,18 @@ const MOODS: Array<{ id: MusicMood; label: string; desc: string }> = [
 
 export default function SettingsPage() {
   const {
-    profile, setName, toggleSound, toggleMotion, setAudio, setNotify,
+    profile, setName, toggleSound, toggleMotion, setAudio, setNotify, setVoice, setLLM,
     resetAll, importSave, pushToast, quests, dailies, oracleMessages,
   } = useStore();
+  const timeLog = useStore((s) => s.timeLog);
+  const notes = useStore((s) => s.notes);
+  const transactions = useStore((s) => s.transactions);
+  const [apiKeyDraft, setApiKeyDraft] = useState(profile.llm.apiKey);
+  const [widgetOn, setWidgetOn] = useState(false);
+  const [voices, setVoices] = useState<VoiceOption[]>([]);
+  useEffect(() => {
+    void listVoices().then(setVoices);
+  }, []);
   const lastReconcile = useStore((s) => s.lastReconcile);
   const [name, setNameLocal] = useState(profile.name);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -32,7 +43,11 @@ export default function SettingsPage() {
   const perm = permissionState();
 
   const exportSave = () => {
-    const data = JSON.stringify({ profile, quests, dailies, oracleMessages, lastReconcile }, null, 2);
+    const data = JSON.stringify(
+      { profile, quests, dailies, oracleMessages, timeLog, notes, transactions, lastReconcile },
+      null,
+      2,
+    );
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -201,10 +216,120 @@ export default function SettingsPage() {
               </button>
             </label>
 
-            <label className="row" style={{ gap: 10, cursor: 'pointer' }}>
+            <label className="row" style={{ gap: 10, cursor: 'pointer', marginBottom: 12 }}>
               <input type="checkbox" checked={profile.notify.celebrate} onChange={(e) => setNotify({ celebrate: e.target.checked })} />
               <span>Célébrations (niveaux, records, journées parfaites)</span>
             </label>
+
+            <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0 12px' }} />
+            <span className="muted">Intensité des relances</span>
+            <div className="row" style={{ marginTop: 8 }}>
+              {([
+                ['discret', 'Discret', 'le strict nécessaire'],
+                ['normal', 'Normal', 'rappels et briefing'],
+                ['duolingo', 'Duolingo 😈', 'relances de midi, culpabilisation affectueuse, double sentinelle'],
+              ] as const).map(([id, label, desc]) => (
+                <button
+                  key={id}
+                  className={`chip ${profile.notify.intensity === id ? 'on' : ''}`}
+                  title={desc}
+                  onClick={() => setNotify({ intensity: id })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="card ornate">
+        <SectionTitle>L'Oracle en ligne</SectionTitle>
+        <p className="muted" style={{ marginBottom: 10 }}>
+          Connecte l'Oracle à Google Gemini (palier gratuit, aucune carte bancaire) pour des
+          réponses fluides, empathiques et personnalisées. Sans clé, l'Oracle reste pleinement
+          fonctionnel en mode local hors-ligne. Obtiens une clé gratuite sur{' '}
+          <strong>aistudio.google.com/apikey</strong> puis colle-la ci-dessous — elle ne quitte
+          jamais cet appareil, sauf pour l'appel direct à l'API Google.
+        </p>
+        <div className="row" style={{ flexWrap: 'nowrap' }}>
+          <input
+            className="input grow" type="password" placeholder="Colle ta clé API Gemini ici"
+            value={apiKeyDraft} onChange={(e) => setApiKeyDraft(e.target.value)}
+          />
+          <button className="btn primary" onClick={() => { setLLM({ apiKey: apiKeyDraft.trim() }); pushToast('check', apiKeyDraft.trim() ? 'Oracle connecté au ciel' : 'Clé retirée — retour au mode local', 'info'); }}>
+            Enregistrer
+          </button>
+        </div>
+        {profile.llm.apiKey && (
+          <>
+            <label className="row" style={{ gap: 10, marginTop: 10 }}>
+              <span className="muted" style={{ width: 90 }}>Modèle</span>
+              <select className="input grow" style={{ maxWidth: 340 }} value={profile.llm.model} onChange={(e) => setLLM({ model: e.target.value })}>
+                {GEMINI_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+            </label>
+            <div className="row" style={{ marginTop: 10 }}>
+              {([
+                ['chaleureux', 'Chaleureux'], ['direct', 'Direct'], ['motivant', 'Motivant'],
+              ] as const).map(([id, label]) => (
+                <button key={id} className={`chip ${profile.llm.tone === id ? 'on' : ''}`} onClick={() => setLLM({ tone: id })}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="card">
+        <SectionTitle>La voix de l'Oracle</SectionTitle>
+        <label className="row" style={{ gap: 10, cursor: 'pointer', marginBottom: 10 }}>
+          <input type="checkbox" checked={profile.voice.spoken} onChange={(e) => setVoice({ spoken: e.target.checked })} />
+          <div>
+            <div style={{ fontWeight: 700 }}>L'Oracle parle</div>
+            <div className="muted">Il lit ses réponses à voix haute (synthèse vocale de l'appareil, hors ligne).</div>
+          </div>
+        </label>
+        {profile.voice.spoken && (
+          <>
+            {voices.length > 0 && (
+              <label className="row" style={{ gap: 10, marginBottom: 10 }}>
+                <span className="muted" style={{ width: 90 }}>Voix</span>
+                <select
+                  className="input grow" style={{ maxWidth: 340 }}
+                  value={profile.voice.voiceURI}
+                  onChange={(e) => setVoice({ voiceURI: e.target.value })}
+                >
+                  <option value="">Voix système par défaut</option>
+                  {voices.map((v) => (
+                    <option key={v.uri} value={v.uri}>{v.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="row" style={{ gap: 10, marginBottom: 10 }}>
+              <span className="muted" style={{ width: 90 }}>Débit</span>
+              <input
+                type="range" min="0.6" max="1.6" step="0.1" className="grow" style={{ maxWidth: 240 }}
+                value={profile.voice.rate}
+                onChange={(e) => setVoice({ rate: Number(e.target.value) })}
+              />
+              <span className="muted" style={{ width: 90 }}>Tonalité</span>
+              <input
+                type="range" min="0.6" max="1.6" step="0.1" className="grow" style={{ maxWidth: 240 }}
+                value={profile.voice.pitch}
+                onChange={(e) => setVoice({ pitch: Number(e.target.value) })}
+              />
+            </label>
+            <button
+              className="btn small"
+              onClick={() => void speak(`Je suis l'Oracle de Lennyx, ${profile.name}. Ta discipline forge ta légende.`, profile.voice)}
+            >
+              <Icon name="sparkle" size={13} /> Écouter un exemple
+            </button>
           </>
         )}
       </div>
@@ -217,6 +342,25 @@ export default function SettingsPage() {
           <Icon name={profile.motionOn ? 'check' : 'close'} size={13} /> Animations {profile.motionOn ? 'activées' : 'coupées'}
         </button>
       </div>
+
+      {typeof window !== 'undefined' && window.lennyxWidget && (
+        <div className="card">
+          <SectionTitle>Widget flottant</SectionTitle>
+          <p className="muted" style={{ marginBottom: 10 }}>
+            Une petite fenêtre toujours au-dessus, affichant tes pas, ton streak et ta prochaine
+            alarme — clique dessus pour rouvrir Lennyx.
+          </p>
+          <button
+            className="btn"
+            onClick={async () => {
+              const on = await window.lennyxWidget!.toggle();
+              setWidgetOn(on);
+            }}
+          >
+            <Icon name={widgetOn ? 'check' : 'close'} size={13} /> Widget {widgetOn ? 'affiché' : 'masqué'}
+          </button>
+        </div>
+      )}
 
       <div className="card">
         <SectionTitle>Sauvegarde</SectionTitle>
@@ -265,7 +409,7 @@ export default function SettingsPage() {
       </div>
 
       <p className="muted" style={{ marginTop: 20, textAlign: 'center', letterSpacing: '0.15em', fontSize: 11 }}>
-        LENNYX v0.3.0 — ORDRE &amp; GLOIRE
+        LENNYX v0.5.0 — ORDRE &amp; GLOIRE
       </p>
     </div>
   );
