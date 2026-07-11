@@ -6,7 +6,9 @@ import { ensurePermission, permissionState, isNative } from '../lib/notify';
 import { playSound } from '../lib/sound';
 import type { MusicMood } from '../lib/music';
 import { listVoices, speak, type VoiceOption } from '../lib/voice';
-import { GEMINI_MODELS } from '../lib/llmOracle';
+import { GEMINI_MODELS, GROQ_MODELS, defaultModelFor } from '../lib/llmOracle';
+import { encryptText, decryptText, isEncryptedPayload } from '../lib/crypto';
+import CloudSyncSection from '../components/CloudSyncSection';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -25,13 +27,17 @@ const MOODS: Array<{ id: MusicMood; label: string; desc: string }> = [
 export default function SettingsPage() {
   const {
     profile, setName, toggleSound, toggleMotion, setAudio, setNotify, setVoice, setLLM,
-    resetAll, importSave, pushToast, quests, dailies, oracleMessages,
+    resetAll, importSave, pushToast, quests, dailies, oracleConversations, activeConversationId,
   } = useStore();
   const timeLog = useStore((s) => s.timeLog);
   const notes = useStore((s) => s.notes);
   const transactions = useStore((s) => s.transactions);
   const [apiKeyDraft, setApiKeyDraft] = useState(profile.llm.apiKey);
   const [widgetOn, setWidgetOn] = useState(false);
+  const [exportPass, setExportPass] = useState('');
+  const [encryptExport, setEncryptExport] = useState(false);
+  const [importPass, setImportPass] = useState('');
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   useEffect(() => {
     void listVoices().then(setVoices);
@@ -42,25 +48,54 @@ export default function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const perm = permissionState();
 
-  const exportSave = () => {
+  const exportSave = async () => {
     const data = JSON.stringify(
-      { profile, quests, dailies, oracleMessages, timeLog, notes, transactions, lastReconcile },
+      { profile, quests, dailies, oracleConversations, activeConversationId, timeLog, notes, transactions, lastReconcile },
       null,
       2,
     );
-    const blob = new Blob([data], { type: 'application/json' });
+    let out = data;
+    if (encryptExport && exportPass) {
+      out = JSON.stringify(await encryptText(data, exportPass), null, 2);
+    }
+    const blob = new Blob([out], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lennyx-save-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `lennyx-save-${new Date().toISOString().slice(0, 10)}${encryptExport ? '.chiffre' : ''}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    pushToast('download', 'Sauvegarde exportée', 'info');
+    pushToast('download', encryptExport ? 'Sauvegarde chiffrée exportée' : 'Sauvegarde exportée', 'info');
   };
 
   const onImportFile = async (f: File) => {
-    const ok = importSave(await f.text());
+    const text = await f.text();
+    try {
+      const parsed = JSON.parse(text);
+      if (isEncryptedPayload(parsed)) {
+        setPendingImportFile(f);
+        return;
+      }
+    } catch {
+      /* pas du JSON chiffré, on tente l'import direct */
+    }
+    const ok = importSave(text);
     pushToast(ok ? 'upload' : 'warning', ok ? 'Sauvegarde importée' : 'Fichier de sauvegarde invalide', ok ? 'info' : 'warn');
+  };
+
+  const confirmEncryptedImport = async () => {
+    if (!pendingImportFile) return;
+    try {
+      const text = await pendingImportFile.text();
+      const plain = await decryptText(JSON.parse(text), importPass);
+      const ok = importSave(plain);
+      pushToast(ok ? 'upload' : 'warning', ok ? 'Sauvegarde déchiffrée et importée' : 'Contenu déchiffré invalide', ok ? 'info' : 'warn');
+    } catch {
+      pushToast('warning', 'Mot de passe incorrect', 'warn');
+    } finally {
+      setPendingImportFile(null);
+      setImportPass('');
+    }
   };
 
   const askPermission = async () => {
@@ -243,21 +278,35 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="card ornate">
+      <div className="card">
         <SectionTitle>L'Oracle en ligne</SectionTitle>
         <p className="muted" style={{ marginBottom: 10 }}>
-          Connecte l'Oracle à Google Gemini (palier gratuit, aucune carte bancaire) pour des
-          réponses fluides, empathiques et personnalisées. Sans clé, l'Oracle reste pleinement
-          fonctionnel en mode local hors-ligne. Obtiens une clé gratuite sur{' '}
-          <strong>aistudio.google.com/apikey</strong> puis colle-la ci-dessous — elle ne quitte
-          jamais cet appareil, sauf pour l'appel direct à l'API Google.
+          Rend l'Oracle conversationnel via un palier gratuit. Sans clé, il reste pleinement
+          fonctionnel en mode local. <strong>Groq</strong> est recommandé (gratuit partout, sans
+          carte). <strong>Gemini</strong> a un palier gratuit qui n'est pas proposé dans
+          l'UE/Royaume-Uni/Suisse — inutile d'insister avec une clé Gemini si tu es dans une de
+          ces régions, préfère Groq.
+        </p>
+        <div className="row" style={{ marginBottom: 10 }}>
+          {(['groq', 'gemini'] as const).map((p) => (
+            <button
+              key={p}
+              className={`chip ${profile.llm.provider === p ? 'on' : ''}`}
+              onClick={() => setLLM({ provider: p, model: defaultModelFor(p) })}
+            >
+              {p === 'groq' ? 'Groq (recommandé)' : 'Gemini'}
+            </button>
+          ))}
+        </div>
+        <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+          Clé gratuite : {profile.llm.provider === 'groq' ? 'console.groq.com/keys' : 'aistudio.google.com/apikey'}
         </p>
         <div className="row" style={{ flexWrap: 'nowrap' }}>
           <input
-            className="input grow" type="password" placeholder="Colle ta clé API Gemini ici"
+            className="input grow" type="password" placeholder={`Colle ta clé API ${profile.llm.provider === 'groq' ? 'Groq' : 'Gemini'} ici`}
             value={apiKeyDraft} onChange={(e) => setApiKeyDraft(e.target.value)}
           />
-          <button className="btn primary" onClick={() => { setLLM({ apiKey: apiKeyDraft.trim() }); pushToast('check', apiKeyDraft.trim() ? 'Oracle connecté au ciel' : 'Clé retirée — retour au mode local', 'info'); }}>
+          <button className="btn small primary" onClick={() => { setLLM({ apiKey: apiKeyDraft.trim() }); pushToast('check', apiKeyDraft.trim() ? 'Oracle connecté' : 'Clé retirée — retour au mode local', 'info'); }}>
             Enregistrer
           </button>
         </div>
@@ -266,7 +315,7 @@ export default function SettingsPage() {
             <label className="row" style={{ gap: 10, marginTop: 10 }}>
               <span className="muted" style={{ width: 90 }}>Modèle</span>
               <select className="input grow" style={{ maxWidth: 340 }} value={profile.llm.model} onChange={(e) => setLLM({ model: e.target.value })}>
-                {GEMINI_MODELS.map((m) => (
+                {(profile.llm.provider === 'groq' ? GROQ_MODELS : GEMINI_MODELS).map((m) => (
                   <option key={m.id} value={m.id}>{m.label}</option>
                 ))}
               </select>
@@ -362,14 +411,26 @@ export default function SettingsPage() {
         </div>
       )}
 
+      <CloudSyncSection />
+
       <div className="card">
-        <SectionTitle>Sauvegarde</SectionTitle>
+        <SectionTitle>Sauvegarde locale</SectionTitle>
         <p className="muted" style={{ marginBottom: 10 }}>
-          Tes données restent sur cet appareil. La synchronisation réseau ci-dessus ou l'export
-          JSON permettent de les transférer.
+          Tes données restent sur cet appareil. La synchronisation réseau, la sauvegarde cloud
+          ci-dessus ou l'export JSON permettent de les transférer.
         </p>
+        <label className="row" style={{ gap: 10, cursor: 'pointer', marginBottom: 8 }}>
+          <input type="checkbox" checked={encryptExport} onChange={(e) => setEncryptExport(e.target.checked)} />
+          <span>Chiffrer l'export avec un mot de passe</span>
+        </label>
+        {encryptExport && (
+          <input
+            className="input" type="password" placeholder="Mot de passe de chiffrement" style={{ marginBottom: 10 }}
+            value={exportPass} onChange={(e) => setExportPass(e.target.value)}
+          />
+        )}
         <div className="row">
-          <button className="btn" onClick={exportSave}>
+          <button className="btn" onClick={exportSave} disabled={encryptExport && !exportPass}>
             <Icon name="download" size={14} /> Exporter
           </button>
           <button className="btn" onClick={() => fileRef.current?.click()}>
@@ -388,6 +449,20 @@ export default function SettingsPage() {
           />
         </div>
       </div>
+
+      {pendingImportFile && (
+        <div className="overlay" onClick={() => setPendingImportFile(null)}>
+          <div className="form-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Fichier chiffré</h3>
+            <p className="muted">Saisis le mot de passe utilisé lors de l'export pour le déchiffrer.</p>
+            <input className="input" type="password" placeholder="Mot de passe" value={importPass} onChange={(e) => setImportPass(e.target.value)} autoFocus />
+            <div className="row" style={{ justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => { setPendingImportFile(null); setImportPass(''); }}>Annuler</button>
+              <button className="btn primary" onClick={confirmEncryptedImport} disabled={!importPass}>Déchiffrer et importer</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ borderColor: 'color-mix(in srgb, var(--danger) 40%, var(--border))' }}>
         <h3 style={{ marginBottom: 10, color: 'var(--danger)', fontFamily: 'var(--font-display)', letterSpacing: '0.06em', fontSize: 15 }}>
@@ -409,7 +484,7 @@ export default function SettingsPage() {
       </div>
 
       <p className="muted" style={{ marginTop: 20, textAlign: 'center', letterSpacing: '0.15em', fontSize: 11 }}>
-        LENNYX v0.5.0 — ORDRE &amp; GLOIRE
+        LENNYX v0.6.0 — ORDRE &amp; GLOIRE
       </p>
     </div>
   );

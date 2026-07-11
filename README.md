@@ -9,7 +9,7 @@ récompenses.
 ## 📱 Installer Lennyx sur ton téléphone
 
 **Option A — L'APK (recommandé)**
-1. Récupère `Lennyx-0.5.0.apk` (dossier `release/` si compilé en local, ou artefact
+1. Récupère `Lennyx-0.6.0.apk` (dossier `release/` si compilé en local, ou artefact
    *Lennyx-Android* de GitHub Actions après un push).
 2. Envoie-le sur ton téléphone (câble USB, ou Réglages → Synchronisation… ou n'importe quoi).
 3. Ouvre le fichier sur le téléphone → Android demande d'autoriser « l'installation
@@ -109,11 +109,42 @@ Tu choisis le sens : récupérer la sauvegarde du PC, ou envoyer celle du télé
   prête à partager ou télécharger — 100 % client, aucun serveur.
 - **Notifications encore plus poussées** intégrées au mode Duolingo (déjà présent en v0.4).
 
-> **Sync cloud multi-appareils liée à un compte** : volontairement **non incluse** en v0.5.
-> Une vraie synchro cloud demande un backend (authentification, base de données, chiffrement,
-> résolution de conflits) — un projet à part entière plutôt qu'un ajout bâclé en fin de version.
-> C'est la proposition concrète pour la v0.6 (candidat : Supabase, palier gratuit). En
-> attendant, la sync LAN par QR code (v0.3) et l'export JSON couvrent le transfert entre appareils.
+## 🔒 v0.5.1 — corrections importantes
+
+- **Plantage Notes/Journal/Victoires corrigé** : un piège classique de Zustand (sélecteur
+  recréant un tableau à chaque rendu) provoquait une boucle infinie avec React 18 et faisait
+  planter l'écran. Le module est maintenant stable et testé de bout en bout.
+- **Moteur audio corrigé** : la profondeur de modulation FM était réglée bien trop haut (jusqu'à
+  2,5× la fréquence porteuse), produisant des grincements métalliques. Profondeur ramenée à des
+  valeurs musicales, filtrage/compression revus (limiteur doux partagé entre effets et musique).
+- **Diagnostic Oracle en ligne** : la clé Gemini de l'utilisateur était valide, mais **le palier
+  gratuit de Google Gemini n'est pas disponible dans l'UE, au Royaume-Uni ni en Suisse**
+  (vérifié empiriquement : quota = 0 pour toute la zone). **Groq** a été ajouté comme fournisseur
+  alternatif — gratuit partout, sans carte, et devient le choix par défaut.
+- **Conversations Oracle compartimentées** : fini le flux unique — plusieurs conversations
+  nommées automatiquement, listées, permutables et supprimables individuellement, avec
+  séparateurs de date.
+- **Réglages Oracle allégés** : la carte « Oracle en ligne » est redevenue discrète (elle
+  attirait trop l'œil), avec un choix clair Groq/Gemini et l'avertissement régional.
+
+## 🚀 Nouveautés v0.6
+
+- **Sauvegarde cloud** : lie ta progression à un compte personnel gratuit (ton propre projet
+  Supabase — aucune carte bancaire). Les données sont **chiffrées sur l'appareil avant l'envoi**
+  (AES-GCM, mot de passe personnel jamais transmis) — même Supabase ne peut pas les lire.
+  Résolution de conflit simple : confirmation avant tout écrasement.
+- **Export/import chiffrés** : même moteur de chiffrement pour les sauvegardes JSON locales.
+- **Mode Pomodoro** : cycles travail/pause configurables, pauses longues automatiques,
+  notifications à chaque transition, XP et succès dédiés.
+- **Widget Android enrichi** : niveau, rang, barre d'XP, barre de pas, streak, prochaine alarme
+  et tâches restantes — le tout dans un vrai widget d'écran d'accueil.
+
+> **Précision honnête** : un widget d'écran **verrouillé** (« lock screen ») façon Jetpack
+> Glance a été évoqué en proposition — après vérification, Android ne propose plus cette
+> fonctionnalité pour les apps tierces sur téléphone depuis Android 5.0 (Glance est juste une
+> API moderne pour écrire des widgets d'écran d'accueil classiques, pas une nouvelle
+> capacité). L'énergie a donc été mise sur un widget d'écran d'accueil bien plus complet plutôt
+> que de promettre quelque chose qu'Android ne permet pas.
 
 ## 🛠️ Stack
 
@@ -167,8 +198,10 @@ npm run electron:build
 - [x] **v0.5** — Oracle en ligne (LLM gratuit + repli local résilient), Notes & Traces de vie,
   onboarding guidé, respiration/méditation, widgets (Android natif + flottant Windows),
   carte de partage
-- [ ] **v0.6** — Social : amis, défis, classements + **sync cloud multi-appareils** liée à un
-  compte (nécessite un vrai backend — palier gratuit Supabase/Firebase envisagé)
+- [x] **v0.6** — Sauvegarde cloud chiffrée (compte perso, palier gratuit Supabase), export/import
+  chiffrés, Pomodoro, widget Android enrichi, fournisseur Groq + corrections v0.5.1
+- [ ] **v0.7** — Social : amis, défis, classements (nécessite un backend supplémentaire —
+  même projet Supabase envisagé, à étendre)
 - [ ] **v1.0** — Boss de la semaine, saisons, quêtes d'histoire
 
 ## 💰 Monétisation

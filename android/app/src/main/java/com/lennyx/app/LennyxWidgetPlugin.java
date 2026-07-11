@@ -24,9 +24,12 @@ public class LennyxWidgetPlugin extends Plugin {
         SharedPreferences.Editor editor = prefs.edit();
         editor.putString("name", call.getString("name", "Aventurier"));
         editor.putInt("level", call.getInt("level", 0));
+        editor.putString("rank", call.getString("rank", "Newcomer"));
+        editor.putInt("xpPercent", call.getInt("xpPercent", 0));
         editor.putInt("stepsToday", call.getInt("stepsToday", 0));
         editor.putInt("stepsGoal", call.getInt("stepsGoal", 8000));
         editor.putInt("streak", call.getInt("streak", 0));
+        editor.putInt("pending", call.getInt("pending", 0));
         editor.putString("nextAlarm", call.getString("nextAlarm", ""));
         editor.apply();
 

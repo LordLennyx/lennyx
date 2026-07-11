@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
-  Quest, Daily, Profile, Toast, LevelUpInfo, SubQuest, OracleMessage, FxEvent, Counters,
+  Quest, Daily, Profile, Toast, LevelUpInfo, SubQuest, OracleMessage, OracleConversation, FxEvent, Counters,
   TimeLogEntry, AlarmDef, NoteEntry, NoteKind, Transaction, TxType,
 } from '../game/types';
 import {
@@ -16,7 +16,7 @@ import {
   answer, briefing, dailiesAtRisk, suggestTemplates, tplRubriqueId,
   type OracleAction, type OracleContext,
 } from '../game/oracle';
-import { askCloudOracle, OracleOfflineError } from '../lib/llmOracle';
+import { askCloudOracle, OracleOfflineError, OracleQuotaError, defaultModelFor } from '../lib/llmOracle';
 import type { TaskTemplate } from '../game/library';
 import { playSound } from '../lib/sound';
 import { notifyNow } from '../lib/notify';
@@ -25,7 +25,8 @@ interface LennyxState {
   profile: Profile;
   quests: Quest[];
   dailies: Daily[];
-  oracleMessages: OracleMessage[];
+  oracleConversations: OracleConversation[];
+  activeConversationId: string | null;
   timeLog: TimeLogEntry[];
   notes: NoteEntry[];
   transactions: Transaction[];
@@ -54,6 +55,9 @@ interface LennyxState {
   addFromTemplate: (categoryId: string, tpl: TaskTemplate) => void;
   oracleSend: (text: string) => Promise<void>;
   oracleClear: () => void;
+  oracleNewConversation: () => void;
+  oracleSwitchConversation: (id: string) => void;
+  oracleDeleteConversation: (id: string) => void;
   setOracleOption: (key: 'briefing' | 'sentinel', value: boolean) => void;
   buyTheme: (id: string) => void;
   buySigil: (id: string) => void;
@@ -86,6 +90,9 @@ interface LennyxState {
   setLLM: (patch: Partial<Profile['llm']>) => void;
   completeOnboarding: (data: { goal?: string; rhythm?: string; tone?: Profile['llm']['tone'] }) => void;
   logBreathing: (seconds: number) => void;
+  logPomodoro: (workMinutes: number) => void;
+  setPomodoroSettings: (patch: Partial<Profile['pomodoro']>) => void;
+  setCloudSync: (patch: Partial<Profile['cloudSync']>) => void;
   pushToast: (icon: string, text: string, kind?: Toast['kind']) => void;
   dismissToast: (id: string) => void;
   clearLevelUp: () => void;
@@ -98,6 +105,7 @@ const defaultCounters = (): Counters => ({
   punctual: 0, late: 0, perfectDays: 0, generated: 0, oracleAsks: 0,
   totalSteps: 0, chronoSessions: 0, chronoMinutes: 0, alarmsStopped: 0,
   breathingSessions: 0, notesLogged: 0, accomplishments: 0, oracleCloudAsks: 0,
+  pomodoros: 0,
 });
 
 const defaultProfile = (): Profile => ({
@@ -136,8 +144,12 @@ const defaultProfile = (): Profile => ({
   },
   wakeLog: {},
   oracle: { briefing: true, sentinel: true },
-  llm: { provider: 'gemini', apiKey: '', model: 'gemini-2.0-flash', tone: 'chaleureux' },
+  // Groq par défaut : le palier gratuit de Gemini n'est pas disponible dans l'UE/UK/Suisse
+  // (vérifié empiriquement), Groq n'a pas cette restriction. Gemini reste sélectionnable.
+  llm: { provider: 'groq', apiKey: '', model: defaultModelFor('groq'), tone: 'chaleureux' },
   onboarding: { done: false },
+  pomodoro: { workMin: 25, breakMin: 5, longBreakMin: 15, longBreakEvery: 4 },
+  cloudSync: { enabled: false, url: '', anonKey: '', autoSync: false },
   history: {},
 });
 
@@ -179,9 +191,34 @@ export const useStore = create<LennyxState>()(
         set((s) => ({ toasts: [...s.toasts, toast].slice(-MAX_TOASTS) }));
       };
 
+      const TITLE_MAX = 42;
+      const titleFromText = (text: string): string => {
+        const clean = text.replace(/\s+/g, ' ').trim();
+        if (!clean) return 'Nouvelle conversation';
+        return clean.length > TITLE_MAX ? clean.slice(0, TITLE_MAX - 1) + '…' : clean;
+      };
+
+      /** Retourne l'id de la conversation active, en en créant une si besoin. */
+      const ensureConversation = (): string => {
+        const s = get();
+        if (s.activeConversationId && s.oracleConversations.some((c) => c.id === s.activeConversationId)) {
+          return s.activeConversationId;
+        }
+        const conv: OracleConversation = {
+          id: uid(), title: 'Nouvelle conversation', createdAt: Date.now(), updatedAt: Date.now(), messages: [],
+        };
+        set((st) => ({ oracleConversations: [conv, ...st.oracleConversations], activeConversationId: conv.id }));
+        return conv.id;
+      };
+
       const oracleSay = (text: string) => {
+        const id = ensureConversation();
         const msg: OracleMessage = { id: uid(), role: 'oracle', text, ts: Date.now() };
-        set((s) => ({ oracleMessages: [...s.oracleMessages, msg].slice(-80) }));
+        set((s) => ({
+          oracleConversations: s.oracleConversations.map((c) =>
+            c.id === id ? { ...c, messages: [...c.messages, msg].slice(-200), updatedAt: Date.now() } : c,
+          ),
+        }));
       };
 
       /** Ajoute de l'XP (peut être négatif), détecte les level-up + déblocages. */
@@ -387,7 +424,8 @@ export const useStore = create<LennyxState>()(
         profile: defaultProfile(),
         quests: [],
         dailies: [],
-        oracleMessages: [],
+        oracleConversations: [],
+        activeConversationId: null,
         timeLog: [],
         notes: [],
         transactions: [],
@@ -630,9 +668,19 @@ export const useStore = create<LennyxState>()(
         oracleSend: async (text) => {
           const trimmed = text.trim();
           if (!trimmed) return;
+          const convId = ensureConversation();
           const userMsg: OracleMessage = { id: uid(), role: 'user', text: trimmed, ts: Date.now() };
           set((s) => ({
-            oracleMessages: [...s.oracleMessages, userMsg].slice(-80),
+            oracleConversations: s.oracleConversations.map((c) =>
+              c.id === convId
+                ? {
+                    ...c,
+                    messages: [...c.messages, userMsg].slice(-200),
+                    updatedAt: Date.now(),
+                    title: c.messages.length === 0 ? titleFromText(trimmed) : c.title,
+                  }
+                : c,
+            ),
             profile: { ...s.profile, counters: { ...s.profile.counters, oracleAsks: s.profile.counters.oracleAsks + 1 } },
           }));
           const s = get();
@@ -642,7 +690,8 @@ export const useStore = create<LennyxState>()(
           if (hasKey) {
             set({ oracleThinking: true });
             try {
-              const history = s.oracleMessages.slice(-10);
+              const activeConv = s.oracleConversations.find((c) => c.id === convId);
+              const history = activeConv ? activeConv.messages.slice(-10) : [];
               const cloud = await askCloudOracle(trimmed, ctx, history);
               if (cloud.actions) applyOracleActions(cloud.actions);
               oracleSay(cloud.text);
@@ -658,10 +707,13 @@ export const useStore = create<LennyxState>()(
               const local = answer(trimmed, ctx);
               if (local.actions) applyOracleActions(local.actions);
               const isOffline = e instanceof OracleOfflineError;
+              const isQuota = e instanceof OracleQuotaError;
               oracleSay(
                 (isOffline
                   ? "Je suis en veille locale — la connexion me manque pour l'instant. "
-                  : `Un souci m'empêche de joindre le ciel (${e instanceof Error ? e.message : 'erreur inconnue'}). `) +
+                  : isQuota
+                    ? `${e.message} En attendant, je réponds en mode local : `
+                    : `Un souci m'empêche de joindre le ciel (${e instanceof Error ? e.message : 'erreur inconnue'}). `) +
                   local.text,
               );
               playSound('oracle', s.profile.soundOn);
@@ -677,7 +729,32 @@ export const useStore = create<LennyxState>()(
           }
           set((st) => ({ profile: checkAchievements(st.profile) }));
         },
-        oracleClear: () => set({ oracleMessages: [] }),
+        oracleClear: () => {
+          const id = get().activeConversationId;
+          if (!id) return;
+          set((s) => ({
+            oracleConversations: s.oracleConversations.map((c) =>
+              c.id === id ? { ...c, messages: [], title: 'Nouvelle conversation', updatedAt: Date.now() } : c,
+            ),
+          }));
+        },
+        oracleNewConversation: () => {
+          const conv: OracleConversation = {
+            id: uid(), title: 'Nouvelle conversation', createdAt: Date.now(), updatedAt: Date.now(), messages: [],
+          };
+          set((s) => ({ oracleConversations: [conv, ...s.oracleConversations], activeConversationId: conv.id }));
+        },
+        oracleSwitchConversation: (id) =>
+          set((s) => (s.oracleConversations.some((c) => c.id === id) ? { activeConversationId: id } : s)),
+        oracleDeleteConversation: (id) => {
+          const s = get();
+          const remaining = s.oracleConversations.filter((c) => c.id !== id);
+          const wasActive = s.activeConversationId === id;
+          set({
+            oracleConversations: remaining,
+            activeConversationId: wasActive ? (remaining[0]?.id ?? null) : s.activeConversationId,
+          });
+        },
         setOracleOption: (key, value) =>
           set((s) => ({ profile: { ...s.profile, oracle: { ...s.profile.oracle, [key]: value } } })),
 
@@ -917,6 +994,24 @@ export const useStore = create<LennyxState>()(
           set({ profile });
         },
 
+        logPomodoro: (workMinutes) => {
+          const s = get();
+          let profile = {
+            ...s.profile,
+            counters: { ...s.profile.counters, pomodoros: s.profile.counters.pomodoros + 1 },
+          };
+          const xp = Math.min(25, Math.round(workMinutes / 2));
+          profile = grantXp(profile, xp);
+          playSound('complete', profile.soundOn);
+          pushToast('hourglass', `Pomodoro terminé : +${xp} XP`, 'xp');
+          profile = checkAchievements(profile);
+          set({ profile });
+        },
+        setPomodoroSettings: (patch) =>
+          set((s) => ({ profile: { ...s.profile, pomodoro: { ...s.profile.pomodoro, ...patch } } })),
+        setCloudSync: (patch) =>
+          set((s) => ({ profile: { ...s.profile, cloudSync: { ...s.profile.cloudSync, ...patch } } })),
+
         setVoice: (patch) => set((s) => ({ profile: { ...s.profile, voice: { ...s.profile.voice, ...patch } } })),
 
         setName: (name) => set((s) => ({ profile: { ...s.profile, name: name.trim() || 'Aventurier' } })),
@@ -929,7 +1024,8 @@ export const useStore = create<LennyxState>()(
         resetAll: () =>
           set({
             profile: defaultProfile(), quests: [], dailies: [],
-            oracleMessages: [], timeLog: [], notes: [], transactions: [],
+            oracleConversations: [], activeConversationId: null,
+            timeLog: [], notes: [], transactions: [],
             lastReconcile: todayStr(),
           }),
 
@@ -937,16 +1033,30 @@ export const useStore = create<LennyxState>()(
           try {
             const data = JSON.parse(json);
             if (!data.profile || !Array.isArray(data.quests) || !Array.isArray(data.dailies)) return false;
+            // rétrocompatibilité : un export plus ancien peut avoir un `oracleMessages` plat
+            let conversations: OracleConversation[] = Array.isArray(data.oracleConversations) ? data.oracleConversations : [];
+            let activeId: string | null = typeof data.activeConversationId === 'string' ? data.activeConversationId : null;
+            if (conversations.length === 0 && Array.isArray(data.oracleMessages) && data.oracleMessages.length > 0) {
+              const conv: OracleConversation = {
+                id: uid(), title: 'Conversation importée', createdAt: Date.now(), updatedAt: Date.now(),
+                messages: data.oracleMessages,
+              };
+              conversations = [conv];
+              activeId = conv.id;
+            }
             set({
               profile: {
                 ...defaultProfile(), ...data.profile,
                 counters: { ...defaultCounters(), ...data.profile.counters },
                 llm: { ...defaultProfile().llm, ...data.profile.llm },
                 onboarding: { ...defaultProfile().onboarding, ...data.profile.onboarding },
+                pomodoro: { ...defaultProfile().pomodoro, ...data.profile.pomodoro },
+                cloudSync: { ...defaultProfile().cloudSync, ...data.profile.cloudSync },
               },
               quests: data.quests,
               dailies: data.dailies.map((d: Daily) => ({ ...d, times: d.times ?? {}, lateDates: d.lateDates ?? [] })),
-              oracleMessages: data.oracleMessages ?? [],
+              oracleConversations: conversations,
+              activeConversationId: activeId,
               timeLog: data.timeLog ?? [],
               notes: data.notes ?? [],
               transactions: data.transactions ?? [],
@@ -961,12 +1071,13 @@ export const useStore = create<LennyxState>()(
     },
     {
       name: 'lennyx-save',
-      version: 5,
+      version: 6,
       partialize: (s) => ({
         profile: s.profile,
         quests: s.quests,
         dailies: s.dailies,
-        oracleMessages: s.oracleMessages,
+        oracleConversations: s.oracleConversations,
+        activeConversationId: s.activeConversationId,
         timeLog: s.timeLog,
         notes: s.notes,
         transactions: s.transactions,
@@ -1046,6 +1157,34 @@ export const useStore = create<LennyxState>()(
           };
           data.notes = data.notes ?? [];
           data.transactions = data.transactions ?? [];
+        }
+        if (version < 6) {
+          // v6 : conversations Oracle compartimentées (au lieu d'un flux unique),
+          // Pomodoro, sync cloud, provider Groq par défaut (Gemini restreint en UE/UK/CH)
+          if (data?.profile) {
+            const def = defaultProfile();
+            data.profile = {
+              ...def,
+              ...data.profile,
+              llm: { ...def.llm, ...data.profile.llm },
+              pomodoro: { ...def.pomodoro, ...data.profile.pomodoro },
+              cloudSync: { ...def.cloudSync, ...data.profile.cloudSync },
+              counters: { ...defaultCounters(), ...data.profile.counters },
+            };
+          }
+          const oldMessages = Array.isArray(data.oracleMessages) ? data.oracleMessages : [];
+          if (oldMessages.length > 0) {
+            const conv = {
+              id: uid(), title: 'Conversation précédente', createdAt: Date.now(), updatedAt: Date.now(),
+              messages: oldMessages,
+            };
+            data.oracleConversations = [conv];
+            data.activeConversationId = conv.id;
+          } else {
+            data.oracleConversations = data.oracleConversations ?? [];
+            data.activeConversationId = data.activeConversationId ?? null;
+          }
+          delete data.oracleMessages;
         }
         return data as any;
       },

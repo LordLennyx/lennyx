@@ -50,6 +50,7 @@ const NAV: Array<{ id: PageId; icon: string; label: string }> = [
 export default function App() {
   const [page, setPage] = useState<PageId>('home');
   const profile = useStore((s) => s.profile);
+  const dailies = useStore((s) => s.dailies);
   const reconcile = useStore((s) => s.reconcile);
   const online = useOnlineStatus();
   const info = levelFromXp(profile.xp);
@@ -101,15 +102,19 @@ export default function App() {
   useEffect(() => {
     const t = todayStr();
     const wake = profile.alarms.wake;
+    const pending = dailies.filter((d) => isScheduledOn(d.days, t) && d.lastCompletedDate !== t).length;
     pushWidgetData({
       name: profile.name,
       level: info.level,
+      rank: info.rank.name,
+      xpPercent: Math.round(info.progress * 100),
       stepsToday: stepsOn(profile, t),
       stepsGoal: profile.steps.goal,
       streak: profile.currentStreak,
+      pending,
       nextAlarm: wake.on && isScheduledOn(wake.days, t) ? wake.time : '',
     });
-  }, [profile.name, info.level, profile.steps, profile.currentStreak, profile.alarms.wake]);
+  }, [profile.name, info.level, info.rank.name, info.progress, profile.steps, profile.currentStreak, profile.alarms.wake, dailies]);
 
   // applique la palette du thème actif
   useEffect(() => {

@@ -129,6 +129,10 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'breath30', name: 'Esprit apaisé', desc: '30 séances de respiration', icon: 'sparkle', gold: 180, check: c('breathingSessions', 30) },
   { id: 'oraclecloud1', name: 'Premier contact céleste', desc: "Consulter l'Oracle en ligne", icon: 'eye', gold: 20, check: c('oracleCloudAsks', 1) },
   { id: 'oraclecloud100', name: 'Confident céleste', desc: "100 échanges avec l'Oracle en ligne", icon: 'eye', gold: 300, check: c('oracleCloudAsks', 100) },
+  // — Pomodoro (v0.6) —
+  { id: 'pomo1', name: 'Première tomate', desc: 'Terminer un premier Pomodoro', icon: 'clock', gold: 15, check: c('pomodoros', 1) },
+  { id: 'pomo25', name: 'Rythme de croisière', desc: '25 Pomodoros accomplis', icon: 'clock', gold: 120, check: c('pomodoros', 25) },
+  { id: 'pomo100', name: 'Machine à concentration', desc: '100 Pomodoros accomplis', icon: 'hourglass', gold: 350, check: c('pomodoros', 100) },
 ];
 
 // ═══════════════════════════ THÈMES (19) ═════════════════════════════════

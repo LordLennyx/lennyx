@@ -113,7 +113,8 @@ function FinancesTab() {
 // ═══════════════ JOURNAL ═══════════════
 
 function JournalTab() {
-  const notes = useStore((s) => s.notes.filter((n) => n.kind === 'note' || n.kind === 'resolution'));
+  const allNotes = useStore((s) => s.notes);
+  const notes = allNotes.filter((n) => n.kind === 'note' || n.kind === 'resolution');
   const addNote = useStore((s) => s.addNote);
   const deleteNote = useStore((s) => s.deleteNote);
   const [kind, setKind] = useState<NoteKind>('note');
@@ -168,7 +169,8 @@ function JournalTab() {
 // ═══════════════ VICTOIRES ═══════════════
 
 function WinsTab() {
-  const wins = useStore((s) => s.notes.filter((n) => n.kind === 'accomplishment'));
+  const allNotes = useStore((s) => s.notes);
+  const wins = allNotes.filter((n) => n.kind === 'accomplishment');
   const addNote = useStore((s) => s.addNote);
   const deleteNote = useStore((s) => s.deleteNote);
   const [text, setText] = useState('');

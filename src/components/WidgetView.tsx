@@ -24,9 +24,12 @@ declare global {
 interface Snapshot {
   name: string;
   level: number;
+  rank: string;
+  progress: number; // 0..1 vers le prochain niveau
   streak: number;
   stepsToday: number;
   stepsGoal: number;
+  pending: number;
   nextAlarm: string | null;
 }
 
@@ -36,17 +39,23 @@ function readSnapshot(): Snapshot | null {
     if (!raw) return null;
     const data = JSON.parse(raw);
     const p = data.state?.profile;
+    const dailies: Array<{ days: number[]; lastCompletedDate?: string }> = data.state?.dailies ?? [];
     if (!p) return null;
     const t = todayStr();
     const stepsToday = (p.steps?.counted?.[t] ?? 0) + (p.steps?.manual?.[t] ?? 0);
+    const pending = dailies.filter((d) => isScheduledOn(d.days ?? [], t) && d.lastCompletedDate !== t).length;
     let nextAlarm: string | null = null;
     if (p.alarms?.wake?.on && isScheduledOn(p.alarms.wake.days ?? [], t)) nextAlarm = p.alarms.wake.time;
+    const info = levelFromXp(p.xp ?? 0);
     return {
       name: p.name ?? 'Aventurier',
-      level: levelFromXp(p.xp ?? 0).level,
+      level: info.level,
+      rank: info.rank.name,
+      progress: info.progress,
       streak: p.currentStreak ?? 0,
       stepsToday,
       stepsGoal: p.steps?.goal ?? 8000,
+      pending,
       nextAlarm,
     };
   } catch {
@@ -62,7 +71,7 @@ export default function WidgetView() {
     return () => clearInterval(iv);
   }, []);
 
-  const progress = snap ? Math.min(1, snap.stepsToday / Math.max(1, snap.stepsGoal)) : 0;
+  const stepsProgress = snap ? Math.min(1, snap.stepsToday / Math.max(1, snap.stepsGoal)) : 0;
 
   return (
     <div
@@ -86,11 +95,17 @@ export default function WidgetView() {
 
       {snap ? (
         <>
-          <div style={{ fontSize: 12, opacity: 0.85 }}>{snap.name}</div>
+          <div className="row" style={{ fontSize: 11, justifyContent: 'space-between' }}>
+            <span style={{ opacity: 0.85 }}>{snap.name}</span>
+            <span style={{ color: '#c9a227', opacity: 0.9 }}>{snap.rank}</span>
+          </div>
+          <div style={{ height: 5, borderRadius: 4, background: '#18181f', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${Math.round(snap.progress * 100)}%`, background: 'linear-gradient(90deg, #d4af37, #8b6ce0)' }} />
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: '50%', border: '3px solid #232323', position: 'relative', flexShrink: 0 }}>
-              <svg width="34" height="34" style={{ position: 'absolute', top: -3, left: -3, transform: 'rotate(-90deg)' }}>
-                <circle cx="17" cy="17" r="14" fill="none" stroke="#d4af37" strokeWidth="3" strokeDasharray={2 * Math.PI * 14} strokeDashoffset={2 * Math.PI * 14 * (1 - progress)} strokeLinecap="round" />
+            <div style={{ width: 30, height: 30, borderRadius: '50%', border: '3px solid #232323', position: 'relative', flexShrink: 0 }}>
+              <svg width="30" height="30" style={{ position: 'absolute', top: -3, left: -3, transform: 'rotate(-90deg)' }}>
+                <circle cx="15" cy="15" r="12" fill="none" stroke="#7fd1ae" strokeWidth="3" strokeDasharray={2 * Math.PI * 12} strokeDashoffset={2 * Math.PI * 12 * (1 - stepsProgress)} strokeLinecap="round" />
               </svg>
             </div>
             <div style={{ fontSize: 11 }}>
@@ -101,8 +116,8 @@ export default function WidgetView() {
               </div>
             </div>
           </div>
-          <div style={{ fontSize: 10.5, opacity: 0.6, marginTop: 'auto', display: 'flex', gap: 5, alignItems: 'center' }}>
-            <Icon name="eye" size={11} /> Parler à l'Oracle…
+          <div style={{ fontSize: 10.5, opacity: 0.75, marginTop: 'auto', display: 'flex', gap: 5, alignItems: 'center' }}>
+            <Icon name="check" size={11} /> {snap.pending > 0 ? `${snap.pending} tâche(s) restante(s)` : 'Journée à jour'}
           </div>
         </>
       ) : (

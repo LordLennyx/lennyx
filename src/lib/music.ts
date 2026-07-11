@@ -3,7 +3,7 @@
 // temps réel, avec réverbération par convolution (impulsion synthétisée).
 // Trois ambiances : éther (calme), bravoure (épique), focus (minimal).
 
-import { getCtx } from './sound';
+import { getCtx, getMasterBus } from './sound';
 
 export type MusicMood = 'ether' | 'valor' | 'focus';
 
@@ -94,20 +94,22 @@ function makeReverb(c: AudioContext): ConvolverNode {
 
 function ensureBus(): GainNode | null {
   const c = getCtx();
-  if (!c) return null;
+  const master = getMasterBus();
+  if (!c || !master) return null;
   if (!bus) {
     bus = c.createGain();
     bus.gain.value = volume;
     const reverb = makeReverb(c);
     const wet = c.createGain();
-    wet.gain.value = 0.55;
+    wet.gain.value = 0.4;
     const lp = c.createBiquadFilter();
     lp.type = 'lowpass';
     lp.frequency.value = 3200;
+    // tout converge vers le bus maître (effets + musique) : un seul limiteur, jamais de saturation
     bus.connect(lp);
-    lp.connect(c.destination);
+    lp.connect(master);
     lp.connect(reverb);
-    reverb.connect(wet).connect(c.destination);
+    reverb.connect(wet).connect(master);
   }
   return bus;
 }
@@ -146,10 +148,11 @@ function pluck(freq: number, gain: number) {
   const o = c.createOscillator();
   o.type = 'sine';
   o.frequency.value = freq;
+  // profondeur FM modeste (fraction de la fondamentale) : un pluck cristallin, pas un grincement
   const mod = c.createOscillator();
   const mg = c.createGain();
   mod.frequency.value = freq * 2;
-  mg.gain.setValueAtTime(freq * 1.2, t0);
+  mg.gain.setValueAtTime(freq * 0.15, t0);
   mg.gain.exponentialRampToValueAtTime(0.01, t0 + 0.8);
   mod.connect(mg).connect(o.frequency);
   o.connect(g).connect(b);

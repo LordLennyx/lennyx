@@ -16,12 +16,20 @@ export function getCtx(): AudioContext | null {
   try {
     if (!ctx) {
       ctx = new AudioContext();
+      // léger lissage des aigus pour éviter toute agressivité résiduelle
+      const smooth = ctx.createBiquadFilter();
+      smooth.type = 'lowpass';
+      smooth.frequency.value = 11000;
+      smooth.Q.value = 0.4;
       const comp = ctx.createDynamicsCompressor();
-      comp.threshold.value = -18;
-      comp.ratio.value = 6;
+      comp.threshold.value = -20;
+      comp.knee.value = 18;
+      comp.ratio.value = 4;
+      comp.attack.value = 0.004;
+      comp.release.value = 0.18;
       master = ctx.createGain();
       master.gain.value = prefs.volume;
-      master.connect(comp).connect(ctx.destination);
+      master.connect(smooth).connect(comp).connect(ctx.destination);
     }
     if (ctx.state === 'suspended') void ctx.resume();
     return ctx;
@@ -31,6 +39,11 @@ export function getCtx(): AudioContext | null {
 }
 
 function out(): GainNode | null {
+  return getCtx() ? master : null;
+}
+
+/** Bus maître partagé (effets + musique) : tout passe par le même limiteur. */
+export function getMasterBus(): GainNode | null {
   return getCtx() ? master : null;
 }
 
@@ -73,11 +86,15 @@ function tone(freq: number, start: number, dur: number, o: ToneOpts = {}) {
     if (o.slideTo) osc.frequency.exponentialRampToValueAtTime(o.slideTo, t0 + dur);
     if (det) osc.detune.value = det;
     if (o.fm) {
+      // Profondeur de modulation exprimée en fraction de la fondamentale (0.12 = shimmer
+      // discret). Les anciennes valeurs (>1×) faisaient passer la fréquence instantanée en
+      // négatif — d'où les grincements métalliques signalés.
       const mod = c.createOscillator();
       const mg = c.createGain();
       mod.frequency.value = f * o.fm.ratio;
-      mg.gain.setValueAtTime(f * o.fm.depth, t0);
-      mg.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      const peak = f * o.fm.depth * 0.12;
+      mg.gain.setValueAtTime(peak, t0);
+      mg.gain.exponentialRampToValueAtTime(Math.max(peak * 0.02, 0.001), t0 + dur);
       mod.connect(mg).connect(osc.frequency);
       mod.start(t0);
       mod.stop(t0 + dur + 0.05);
@@ -90,7 +107,7 @@ function tone(freq: number, start: number, dur: number, o: ToneOpts = {}) {
   if (o.detune) mkOsc(freq, o.detune);
 }
 
-/** Souffle percussif (bruit blanc filtré) pour le punch. */
+/** Souffle percussif (bruit blanc filtré) pour le punch. Q plafonné pour éviter le sifflement. */
 function noiseHit(start: number, dur: number, freq: number, gain = 0.05, q = 6) {
   const c = getCtx();
   const m = out();
@@ -105,11 +122,14 @@ function noiseHit(start: number, dur: number, freq: number, gain = 0.05, q = 6) 
   const f = c.createBiquadFilter();
   f.type = 'bandpass';
   f.frequency.value = freq;
-  f.Q.value = q;
+  f.Q.value = Math.min(q, 4.5);
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = Math.min(freq * 1.6, 9000);
   const g = c.createGain();
   g.gain.setValueAtTime(gain, t0);
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  src.connect(f).connect(g).connect(m);
+  src.connect(f).connect(lp).connect(g).connect(m);
   src.start(t0);
 }
 
