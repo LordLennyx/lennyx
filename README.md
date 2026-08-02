@@ -209,3 +209,13 @@ npm run electron:build
 Volontairement **aucune** pour l'instant : Lennyx est une app personnelle et locale. Les tiers
 « premium » (cosmétiques exclusifs, cloud sync) sont notés dans la roadmap et ne seront
 envisagés que si un backend voit le jour. Tout ce qui existe aujourd'hui restera gratuit.
+
+## 👤 Auteur
+
+**Njundiyimun Béchard Miles-Daniel** — Full-Stack Developer, IT Generalist & Security Analyst
+Produit **Lennyx IT**.
+
+## 📄 Licence
+
+© 2026 Njundiyimun Béchard Miles-Daniel / Lennyx IT — Tous droits réservés.
+Voir [`LICENSE`](LICENSE).
