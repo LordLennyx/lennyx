@@ -212,10 +212,10 @@ envisagés que si un backend voit le jour. Tout ce qui existe aujourd'hui rester
 
 ## 👤 Auteur
 
-**Njundiyimun Béchard Miles-Daniel** — Full-Stack Developer, IT Generalist & Security Analyst
+**NJUNDIYIMUN BECHARD Miles-Daniel** — Full-Stack Developer, IT Generalist & Security Analyst
 Produit **Lennyx IT**.
 
 ## 📄 Licence
 
-© 2026 Njundiyimun Béchard Miles-Daniel / Lennyx IT — Tous droits réservés.
+© 2026 NJUNDIYIMUN BECHARD Miles-Daniel / Lennyx IT — Tous droits réservés.
 Voir [`LICENSE`](LICENSE).
