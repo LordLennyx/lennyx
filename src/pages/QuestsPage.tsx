@@ -65,7 +65,7 @@ function QuestForm({ onClose }: { onClose: () => void }) {
         <div>
           <span className="muted">Sous-quêtes (étapes)</span>
           {subs.map((sub, i) => (
-            <div className="row" key={i} style={{ marginTop: 6, flexWrap: 'nowrap' }}>
+            <div className="row keep-row" key={i} style={{ marginTop: 6, flexWrap: 'nowrap' }}>
               <input
                 className="input grow"
                 placeholder={`Étape ${i + 1}`}
@@ -98,7 +98,7 @@ function QuestCard({ quest }: { quest: Quest }) {
 
   return (
     <div className={`card hover ${done ? 'quest-done' : ''}`}>
-      <div className="row" style={{ flexWrap: 'nowrap' }}>
+      <div className="row keep-row" style={{ flexWrap: 'nowrap' }}>
         <CompleteButton
           done={done}
           title={done ? 'Accomplie' : 'Accomplir la quête'}

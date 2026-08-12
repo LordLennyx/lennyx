@@ -77,7 +77,9 @@ interface LennyxState {
   setSyncHost: (host: string) => void;
   addSteps: (n: number) => void;
   addManualSteps: (n: number) => void;
+  setNativeSteps: (days: Record<string, number>) => void;
   setStepsGoal: (n: number) => void;
+  setBackground: (patch: Partial<Profile['background']>) => void;
   logTime: (label: string, seconds: number, taskId?: string) => void;
   deleteTimeLog: (id: string) => void;
   setAlarm: (kind: 'wake' | 'lullaby', patch: Partial<AlarmDef>) => void;
@@ -138,6 +140,7 @@ const defaultProfile = (): Profile => ({
   },
   voice: { spoken: false, voiceURI: '', rate: 1, pitch: 1 },
   steps: { goal: 8000, counted: {}, manual: {}, bestDay: 0 },
+  background: { enabled: false, askedOnce: false },
   alarms: {
     wake: { on: false, time: '07:00', days: [], melody: 'aube', volume: 0.8 },
     lullaby: { on: false, time: '22:30', days: [], melody: 'lune', volume: 0.4 },
@@ -211,9 +214,12 @@ export const useStore = create<LennyxState>()(
         return conv.id;
       };
 
-      const oracleSay = (text: string) => {
+      const oracleSay = (text: string, created?: string[]) => {
         const id = ensureConversation();
-        const msg: OracleMessage = { id: uid(), role: 'oracle', text, ts: Date.now() };
+        const msg: OracleMessage = {
+          id: uid(), role: 'oracle', text, ts: Date.now(),
+          created: created && created.length > 0 ? created : undefined,
+        };
         set((s) => ({
           oracleConversations: s.oracleConversations.map((c) =>
             c.id === id ? { ...c, messages: [...c.messages, msg].slice(-200), updatedAt: Date.now() } : c,
@@ -358,26 +364,46 @@ export const useStore = create<LennyxState>()(
         createdAt: new Date().toISOString(),
       });
 
-      const applyOracleActions = (actions: OracleAction[]) => {
+      /**
+       * Exécute les actions de l'Oracle et renvoie la liste lisible de ce qui a
+       * été RÉELLEMENT créé — affichée sous sa réponse pour qu'on voie toujours
+       * que l'Oracle a agi et pas seulement parlé.
+       */
+      const applyOracleActions = (actions: OracleAction[]): string[] => {
+        const created: string[] = [];
+        const existsAlready = (title: string) => {
+          const s = get();
+          const norm = title.trim().toLowerCase();
+          return (
+            s.dailies.some((d) => d.title.trim().toLowerCase() === norm) ||
+            s.quests.some((q) => !q.completedAt && q.title.trim().toLowerCase() === norm)
+          );
+        };
+
         for (const a of actions) {
           if (a.kind === 'add-quest' && a.payload?.title) {
             const p = a.payload;
+            const title = (p.title ?? "").trim();
+            if (existsAlready(title)) continue;
             set((s) => ({
               quests: [
                 makeQuest({
-                  title: p.title!,
+                  title,
                   difficulty: p.difficulty ?? 'normal',
                   type: p.isEvent ? 'event' : 'quest',
                 }),
                 ...s.quests,
               ],
             }));
+            created.push(`Quête · ${title}`);
           } else if (a.kind === 'add-daily' && a.payload?.title) {
             const p = a.payload;
+            const title = (p.title ?? "").trim();
+            if (existsAlready(title)) continue;
             set((s) => ({
               dailies: [
                 makeDaily({
-                  title: p.title!,
+                  title,
                   difficulty: p.difficulty ?? 'normal',
                   days: p.days,
                   timeLimit: p.timeLimit,
@@ -385,17 +411,20 @@ export const useStore = create<LennyxState>()(
                 ...s.dailies,
               ],
             }));
+            created.push(`Quotidienne · ${title}${p.timeLimit ? ` (avant ${p.timeLimit})` : ''}`);
           } else if (a.kind === 'generate-day') {
             const s = get();
             const ctx = oracleCtx(s);
             const rubs = a.payload?.rubriques;
-            const sugg = suggestTemplates(ctx, rubs ? Math.min(6, 2 + rubs.length * 2) : 4, rubs);
+            const count = a.payload?.count ?? (rubs ? Math.min(6, 2 + rubs.length * 2) : 4);
+            const sugg = suggestTemplates(ctx, count, rubs);
             const newDailies: Daily[] = [];
             const newQuests: Quest[] = [];
             for (const tpl of sugg) {
               const rub = tplRubriqueId(tpl);
               if (tpl.kind === 'quest') {
                 newQuests.push(makeQuest({ title: tpl.title, description: tpl.desc, difficulty: tpl.difficulty, category: rub }));
+                created.push(`Quête · ${tpl.title}`);
               } else {
                 newDailies.push(
                   makeDaily({
@@ -403,6 +432,7 @@ export const useStore = create<LennyxState>()(
                     category: rub, days: tpl.days, timeLimit: tpl.before,
                   }),
                 );
+                created.push(`Quotidienne · ${tpl.title}${tpl.before ? ` (avant ${tpl.before})` : ''}`);
               }
             }
             set((st) => ({
@@ -418,6 +448,10 @@ export const useStore = create<LennyxState>()(
             }));
           }
         }
+        if (created.length > 0) {
+          pushToast('check', `L'Oracle a ajouté ${created.length} élément(s) à ton journal`, 'info');
+        }
+        return created;
       };
 
       return {
@@ -693,8 +727,8 @@ export const useStore = create<LennyxState>()(
               const activeConv = s.oracleConversations.find((c) => c.id === convId);
               const history = activeConv ? activeConv.messages.slice(-10) : [];
               const cloud = await askCloudOracle(trimmed, ctx, history);
-              if (cloud.actions) applyOracleActions(cloud.actions);
-              oracleSay(cloud.text);
+              const created = cloud.actions ? applyOracleActions(cloud.actions) : [];
+              oracleSay(cloud.text, created);
               playSound('oracle', s.profile.soundOn);
               set((st) => ({
                 profile: checkAchievements({
@@ -705,7 +739,7 @@ export const useStore = create<LennyxState>()(
             } catch (e) {
               // Mode hors-ligne résilient : l'Oracle bascule poliment en local, sans jamais bloquer.
               const local = answer(trimmed, ctx);
-              if (local.actions) applyOracleActions(local.actions);
+              const createdLocal = local.actions ? applyOracleActions(local.actions) : [];
               const isOffline = e instanceof OracleOfflineError;
               const isQuota = e instanceof OracleQuotaError;
               oracleSay(
@@ -715,6 +749,7 @@ export const useStore = create<LennyxState>()(
                     ? `${e.message} En attendant, je réponds en mode local : `
                     : `Un souci m'empêche de joindre le ciel (${e instanceof Error ? e.message : 'erreur inconnue'}). `) +
                   local.text,
+                createdLocal,
               );
               playSound('oracle', s.profile.soundOn);
               if (!isOffline) pushToast('warning', "L'Oracle en ligne est indisponible pour l'instant", 'warn');
@@ -723,8 +758,8 @@ export const useStore = create<LennyxState>()(
             }
           } else {
             const reply = answer(trimmed, ctx);
-            if (reply.actions) applyOracleActions(reply.actions);
-            oracleSay(reply.text);
+            const created = reply.actions ? applyOracleActions(reply.actions) : [];
+            oracleSay(reply.text, created);
             playSound('oracle', s.profile.soundOn);
           }
           set((st) => ({ profile: checkAchievements(st.profile) }));
@@ -873,8 +908,39 @@ export const useStore = create<LennyxState>()(
             }),
           });
         },
+        /**
+         * Compteurs venus du service Android : ils font AUTORITÉ (capteur
+         * matériel, comptage continu). On remplace donc `counted` au lieu de
+         * l'incrémenter — aucun double comptage possible avec l'accéléromètre.
+         */
+        setNativeSteps: (days) => {
+          const s = get();
+          const t = todayStr();
+          const counted = { ...s.profile.steps.counted };
+          let gained = 0;
+          for (const [day, value] of Object.entries(days)) {
+            if (day < addDays(t, -90)) continue;
+            const previous = counted[day] ?? 0;
+            if (value > previous) {
+              gained += value - previous;
+              counted[day] = value;
+            }
+          }
+          if (gained === 0) return;
+          for (const k of Object.keys(counted)) if (k < addDays(t, -90)) delete counted[k];
+          const today = (counted[t] ?? 0) + (s.profile.steps.manual[t] ?? 0);
+          set({
+            profile: checkAchievements({
+              ...s.profile,
+              steps: { ...s.profile.steps, counted, bestDay: Math.max(s.profile.steps.bestDay, today) },
+              counters: { ...s.profile.counters, totalSteps: s.profile.counters.totalSteps + gained },
+            }),
+          });
+        },
         setStepsGoal: (n) =>
           set((s) => ({ profile: { ...s.profile, steps: { ...s.profile.steps, goal: Math.max(1000, n) } } })),
+        setBackground: (patch) =>
+          set((s) => ({ profile: { ...s.profile, background: { ...s.profile.background, ...patch } } })),
 
         // ── Chronomètre ──────────────────────────────────────────────────
         logTime: (label, seconds, taskId) => {
@@ -1071,7 +1137,7 @@ export const useStore = create<LennyxState>()(
     },
     {
       name: 'lennyx-save',
-      version: 6,
+      version: 7,
       partialize: (s) => ({
         profile: s.profile,
         quests: s.quests,
@@ -1185,6 +1251,16 @@ export const useStore = create<LennyxState>()(
             data.activeConversationId = data.activeConversationId ?? null;
           }
           delete data.oracleMessages;
+        }
+        if (version < 7 && data?.profile) {
+          // v7 : présence permanente Android (service de premier plan)
+          const def = defaultProfile();
+          data.profile = {
+            ...def,
+            ...data.profile,
+            background: { ...def.background, ...data.profile.background },
+            counters: { ...defaultCounters(), ...data.profile.counters },
+          };
         }
         return data as any;
       },

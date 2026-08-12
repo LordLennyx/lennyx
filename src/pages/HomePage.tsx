@@ -94,7 +94,7 @@ export default function HomePage({ goTo }: { goTo: (p: string) => void }) {
           const done = d.lastCompletedDate === t;
           const rub = rubrique(d.category);
           return (
-            <div key={d.id} className={`card hover row ${done ? 'quest-done' : ''}`} style={{ flexWrap: 'nowrap' }}>
+            <div key={d.id} className={`card hover row keep-row ${done ? 'quest-done' : ''}`} style={{ flexWrap: 'nowrap' }}>
               <CompleteButton
                 done={done}
                 title={done ? 'Accomplie' : 'Accomplir'}
@@ -130,7 +130,7 @@ export default function HomePage({ goTo }: { goTo: (p: string) => void }) {
         activeQuests.slice(0, 5).map((q) => {
           const late = q.deadline && q.deadline < t;
           return (
-            <div key={q.id} className="card hover row" style={{ flexWrap: 'nowrap' }}>
+            <div key={q.id} className="card hover row keep-row" style={{ flexWrap: 'nowrap' }}>
               <CompleteButton done={false} title="Accomplir" onClick={(e) => completeQuest(q.id, { x: e.clientX, y: e.clientY })} />
               <div className="grow">
                 <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 7 }}>

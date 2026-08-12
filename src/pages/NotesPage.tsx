@@ -56,15 +56,38 @@ function FinancesTab() {
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <div className="row" style={{ flexWrap: 'nowrap' }}>
-          <select className="input" style={{ maxWidth: 130 }} value={type} onChange={(e) => setType(e.target.value as TxType)}>
-            <option value="expense">Dépense</option>
-            <option value="income">Revenu</option>
-          </select>
-          <input className="input grow" placeholder="Libellé (ex : courses, salaire…)" value={label} onChange={(e) => setLabel(e.target.value)} />
-          <input className="input" style={{ maxWidth: 110 }} type="number" min="0" step="0.01" placeholder="Montant" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <input className="input" style={{ maxWidth: 130 }} placeholder="Catégorie" value={category} onChange={(e) => setCategory(e.target.value)} />
-          <button className="btn primary" onClick={submit} disabled={!label.trim() || !amount}>
+        <div className="row">
+          <div className="row" style={{ flex: '1 1 100%', gap: 8 }}>
+            <button
+              className={`chip ${type === 'expense' ? 'on' : ''}`}
+              style={{ flex: 1, justifyContent: 'center' }}
+              onClick={() => setType('expense')}
+            >
+              Dépense
+            </button>
+            <button
+              className={`chip ${type === 'income' ? 'on' : ''}`}
+              style={{ flex: 1, justifyContent: 'center' }}
+              onClick={() => setType('income')}
+            >
+              Revenu
+            </button>
+          </div>
+          <input
+            className="input" style={{ flex: '3 1 190px' }}
+            placeholder="Libellé (ex : courses, salaire…)"
+            value={label} onChange={(e) => setLabel(e.target.value)}
+          />
+          <input
+            className="input" style={{ flex: '1 1 110px' }} type="number" inputMode="decimal"
+            min="0" step="0.01" placeholder="Montant"
+            value={amount} onChange={(e) => setAmount(e.target.value)}
+          />
+          <input
+            className="input" style={{ flex: '1 1 130px' }} placeholder="Catégorie (optionnel)"
+            value={category} onChange={(e) => setCategory(e.target.value)}
+          />
+          <button className="btn primary full-mobile" onClick={submit} disabled={!label.trim() || !amount}>
             <Icon name="plus" size={13} /> Ajouter
           </button>
         </div>
@@ -188,9 +211,14 @@ function WinsTab() {
           Consigne une victoire — petite ou grande. Chaque accomplishment noté rapporte un peu d'XP :
           c'est ta mémoire de ce que tu as réussi, pas seulement de ce qu'il te reste à faire.
         </p>
-        <div className="row" style={{ flexWrap: 'nowrap' }}>
-          <input className="input grow" placeholder="Aujourd'hui, j'ai réussi à…" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
-          <button className="btn primary" onClick={submit} disabled={!text.trim()}>
+        <div className="row">
+          <input
+            className="input" style={{ flex: '2 1 200px' }}
+            placeholder="Aujourd'hui, j'ai réussi à…"
+            value={text} onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && submit()}
+          />
+          <button className="btn primary full-mobile" onClick={submit} disabled={!text.trim()}>
             <Icon name="star" size={13} /> Consigner
           </button>
         </div>

@@ -47,7 +47,7 @@ export function TaskCard({
 }) {
   return (
     <div className={`card hover ${done ? 'quest-done' : ''}`}>
-      <div className="row" style={{ flexWrap: 'nowrap' }}>{children}</div>
+      <div className="row keep-row" style={{ flexWrap: 'nowrap' }}>{children}</div>
       {footer}
     </div>
   );

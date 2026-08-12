@@ -133,6 +133,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'pomo1', name: 'Première tomate', desc: 'Terminer un premier Pomodoro', icon: 'clock', gold: 15, check: c('pomodoros', 1) },
   { id: 'pomo25', name: 'Rythme de croisière', desc: '25 Pomodoros accomplis', icon: 'clock', gold: 120, check: c('pomodoros', 25) },
   { id: 'pomo100', name: 'Machine à concentration', desc: '100 Pomodoros accomplis', icon: 'hourglass', gold: 350, check: c('pomodoros', 100) },
+  // — Présence permanente (v0.7) —
+  { id: 'presence', name: 'Compagnon de tous les instants', desc: 'Activer la présence permanente de Lennyx', icon: 'heart', gold: 50, check: (p) => p.background.enabled },
 ];
 
 // ═══════════════════════════ THÈMES (19) ═════════════════════════════════

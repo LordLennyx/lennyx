@@ -180,6 +180,58 @@ button, input, textarea, select { font-family: inherit; color: inherit; }
   .content { padding: 18px 16px 30px; }
 }
 
+/* ══ Adaptation mobile : plus aucun champ écrasé ni invisible ═══════════
+   Sur petit écran, tout `.row` reprend le droit de passer à la ligne — les
+   `flexWrap: 'nowrap'` en style inline (formulaires à 4-5 champs) rendaient
+   sinon les champs illisibles voire invisibles. Les lignes qui doivent
+   impérativement rester horizontales portent la classe `.keep-row`. */
+@media (max-width: 760px) {
+  .row:not(.keep-row) { flex-wrap: wrap !important; }
+
+  /* un champ en flex ne doit jamais déborder de son conteneur */
+  .row .input,
+  .row select.input,
+  .row textarea.input { min-width: 0; }
+
+  /* les largeurs fixes pensées pour le bureau deviennent fluides */
+  .row > .input[style*="max-width"],
+  .row > select.input[style*="max-width"] { max-width: none !important; flex: 1 1 140px; }
+
+  /* un formulaire tient toute la largeur, boutons compris */
+  .form-field { flex: 1 1 100%; }
+  .row > .btn.full-mobile { flex: 1 1 100%; justify-content: center; }
+
+  /* barre de navigation : 10 onglets ne tiennent pas — on la rend défilante */
+  .bottombar {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .bottombar::-webkit-scrollbar { display: none; }
+  .bottombar .nav-btn {
+    flex: 0 0 auto;
+    min-width: 68px;
+  }
+
+  /* libellés de réglages : au-dessus du champ plutôt que comprimés à gauche */
+  .row > .muted[style*="width"] { width: auto !important; flex: 1 1 100%; }
+
+  .form-modal { padding: 18px 16px; }
+  .stat-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  h1.page-title, h2.page-title { font-size: 22px; }
+  .oracle-chat { max-height: 46vh; }
+
+  /* cibles tactiles : au doigt, on ne vise pas au pixel près */
+  input[type='checkbox'] { width: 22px; height: 22px; }
+  .btn { padding: 11px 16px; }
+  .btn.small { padding: 8px 12px; }
+  .chip { padding: 8px 13px; }
+  .complete-btn { width: 46px; height: 46px; }
+  label.row { padding: 2px 0; }
+
+  /* un message d'Oracle prend presque toute la largeur, c'est plus lisible */
+  .msg, .oracle-created { max-width: 92%; }
+}
+
 /* ── Typo ── */
 h1.page-title, h2.page-title {
   font-family: var(--font-display);
@@ -322,6 +374,27 @@ h3.section-title::after {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
+
+/* Cases à cocher et curseurs aux couleurs du thème (au lieu du bleu système),
+   et assez grands pour être touchés au doigt sans viser. */
+input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+input[type='range'] {
+  accent-color: var(--accent);
+  height: 22px;
+  cursor: pointer;
+}
+input[type='time'],
+input[type='date'] {
+  color-scheme: dark; /* le sélecteur natif suit le thème sombre */
+}
+:root[data-theme='ivory'] input[type='time'],
+:root[data-theme='ivory'] input[type='date'] { color-scheme: light; }
 
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .grow { flex: 1; min-width: 0; }
@@ -665,6 +738,45 @@ h3.section-title::after {
   letter-spacing: 0.3em;
   color: var(--gold);
   margin-bottom: 6px;
+}
+
+/* Preuve visuelle que l'Oracle a agi et pas seulement parlé */
+.oracle-created {
+  align-self: flex-start;
+  max-width: 78%;
+  margin: 6px 0 2px;
+  padding: 9px 13px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--success) 45%, var(--border));
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+  animation: page-in 0.3s ease;
+}
+.oracle-created-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--success);
+  margin-bottom: 5px;
+}
+.oracle-created-item {
+  font-size: 12.5px;
+  color: var(--text);
+  padding: 2px 0 2px 18px;
+  position: relative;
+}
+.oracle-created-item::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 9px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--success);
 }
 
 /* rubrique (bibliothèque) */

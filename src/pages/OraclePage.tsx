@@ -106,7 +106,7 @@ export default function OraclePage() {
       </p>
 
       <div className="row" style={{ marginBottom: 12, alignItems: 'center' }}>
-        <div className="row" style={{ flex: 1, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 4 }}>
+        <div className="row keep-row" style={{ flex: 1, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 4 }}>
           {conversations.length === 0 && <span className="muted" style={{ fontSize: 12 }}>Aucune conversation pour l'instant</span>}
           {conversations.map((c) => (
             <button
@@ -144,6 +144,16 @@ export default function OraclePage() {
                   </div>
                 )}
                 <div className={`msg ${m.role}`}>{m.text}</div>
+                {m.created && m.created.length > 0 && (
+                  <div className="oracle-created">
+                    <div className="oracle-created-head">
+                      <Icon name="check" size={12} /> Ajouté à ton journal
+                    </div>
+                    {m.created.map((c, k) => (
+                      <div key={k} className="oracle-created-item">{c}</div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -157,7 +167,7 @@ export default function OraclePage() {
           ))}
         </div>
 
-        <div className="row" style={{ marginTop: 12, flexWrap: 'nowrap' }}>
+        <div className="row keep-row" style={{ marginTop: 12, flexWrap: 'nowrap' }}>
           <input
             className="input grow"
             placeholder="Parle à l'Oracle…"

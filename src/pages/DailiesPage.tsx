@@ -113,7 +113,7 @@ export default function DailiesPage() {
           const rub = rubrique(d.category);
           return (
             <div key={d.id} className={`card hover ${done ? 'quest-done' : ''}`}>
-              <div className="row" style={{ flexWrap: 'nowrap' }}>
+              <div className="row keep-row" style={{ flexWrap: 'nowrap' }}>
                 <CompleteButton
                   done={done}
                   disabled={!scheduledToday}

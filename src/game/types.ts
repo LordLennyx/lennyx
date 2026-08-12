@@ -104,6 +104,8 @@ export interface OracleMessage {
   role: 'user' | 'oracle';
   text: string;
   ts: number;
+  /** Libellés de ce que l'Oracle a réellement créé — affiché sous le message. */
+  created?: string[];
 }
 
 /** Une conversation compartimentée avec l'Oracle (titre auto, historique propre). */
@@ -166,6 +168,11 @@ export interface Profile {
     counted: Record<string, number>; // date -> pas comptés par le capteur
     manual: Record<string, number>; // date -> pas ajoutés à la main
     bestDay: number;
+  };
+  /** Présence permanente : service Android de premier plan (pas + veille). */
+  background: {
+    enabled: boolean;
+    askedOnce: boolean; // proposition d'activation déjà faite au moins une fois
   };
   alarms: {
     wake: AlarmDef;

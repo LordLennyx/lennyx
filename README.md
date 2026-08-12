@@ -146,6 +146,28 @@ Tu choisis le sens : récupérer la sauvegarde du PC, ou envoyer celle du télé
 > capacité). L'énergie a donc été mise sur un widget d'écran d'accueil bien plus complet plutôt
 > que de promettre quelque chose qu'Android ne permet pas.
 
+## 🔔 Nouveautés v0.7 — présence permanente et harcèlement millimétré
+
+- **Lennyx vit en permanence dans le téléphone.** Un service Android de premier plan compte les
+  pas avec le **capteur matériel** — écran éteint, application fermée, et il redémarre tout seul
+  après un redémarrage du téléphone. Fini le podomètre qui ne comptait que l'app ouverte.
+  À activer dans Outils → Pas (ou Réglages) : Android exige une notification discrète permanente
+  pour autoriser ce fonctionnement, c'est le prix à payer et il est affiché honnêtement.
+- **L'Oracle agit vraiment.** Il ne se contente plus de décrire : chaque tâche qu'il évoque est
+  réellement créée, et une **carte verte sous sa réponse liste ce qu'il vient d'ajouter**. Le
+  lecteur d'actions accepte désormais plusieurs créations d'un coup (un programme entier),
+  n'importe où dans la réponse, et la consigne donnée au modèle est catégorique sur ce point.
+- **Notifications au millimètre.** L'avance fixe disparaît au profit d'une **escalade calculée**
+  selon la difficulté de la tâche et le temps restant : une tâche facile est rappelée à 15 et
+  5 min ; une épique dès 2 h avant, puis de plus en plus serré jusqu'à la dernière minute. Le ton
+  ET la sonnerie changent en route (calme → pressant → sanction → relance).
+  **Sept sonneries distinctes**, synthétisées au build (aucun fichier audio importé).
+  Nouveau : rappels d'**échéance des quêtes**, relances **après** l'heure limite, relances
+  horaires et avertissement de 23h30 en mode *Implacable* — jusqu'à ~47 notifications par jour.
+- **Interface mobile revue de fond en comble** : plus aucun champ écrasé ni invisible (le
+  formulaire des finances était illisible sur Android), barre de navigation défilante, cibles
+  tactiles agrandies, cases à cocher et curseurs aux couleurs du thème.
+
 ## 🛠️ Stack
 
 | Couche | Techno |
@@ -200,7 +222,9 @@ npm run electron:build
   carte de partage
 - [x] **v0.6** — Sauvegarde cloud chiffrée (compte perso, palier gratuit Supabase), export/import
   chiffrés, Pomodoro, widget Android enrichi, fournisseur Groq + corrections v0.5.1
-- [ ] **v0.7** — Social : amis, défis, classements (nécessite un backend supplémentaire —
+- [x] **v0.7** — Présence permanente Android (capteur matériel, service de premier plan, relance
+  au démarrage), Oracle qui agit vraiment, escalade des rappels et 7 sonneries, refonte mobile
+- [ ] **v0.8** — Social : amis, défis, classements (nécessite un backend supplémentaire —
   même projet Supabase envisagé, à étendre)
 - [ ] **v1.0** — Boss de la semaine, saisons, quêtes d'histoire
 

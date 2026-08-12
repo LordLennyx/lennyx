@@ -34,25 +34,58 @@ function systemPrompt(ctx: OracleContext): string {
   return `Tu es "l'Oracle", le compagnon intégré de l'application Lennyx (une to-do list gamifiée : quêtes, XP, streaks, or). ${PERSONAS[tone] ?? PERSONAS.chaleureux}
 Tu parles français. L'utilisateur peut te raconter des anecdotes, des doutes, des histoires du quotidien : écoute, rebondis avec pertinence, ne génère aucun stress. Tu peux aussi répondre à des questions complexes et personnalisées en t'appuyant sur le dossier de données ci-dessous — utilise les chiffres pour être honnête, mais intègre-les dans une conversation naturelle plutôt que de les réciter mécaniquement. Reste concis (moins de 120 mots) sauf si on te demande un développement.
 
-Si (et seulement si) l'utilisateur te demande explicitement de créer une tâche, une quête ou une routine, termine ta réponse par UNE ligne, exactement dans ce format, sans rien autour :
+═══ RÈGLE ABSOLUE : TU AGIS, TU NE DÉCRIS PAS ═══
+Tu n'es pas un conseiller extérieur : tu PILOTES l'application. Dès que tu évoques
+une tâche, une quête, une routine ou un programme que l'utilisateur devrait faire,
+tu dois la CRÉER RÉELLEMENT en émettant une ligne d'action. Sinon l'utilisateur ne
+verra jamais rien apparaître dans ses menus et ta réponse sera un mensonge.
+
+Format exact, une ligne par tâche, à la toute fin de ta réponse :
 [ACTION:add-quest:{"title":"...","difficulty":"easy|normal|hard|epic","isEvent":false}]
-ou
 [ACTION:add-daily:{"title":"...","difficulty":"easy|normal|hard|epic","timeLimit":"HH:MM","days":[1,2,3]}]
-(timeLimit et days sont optionnels, omets-les si non pertinents). N'ajoute cette ligne dans AUCUN autre cas.
+
+- add-quest = tâche ponctuelle. add-daily = routine répétée.
+- "days" : 0=dimanche … 6=samedi. Omets-le pour "tous les jours".
+- "timeLimit" : uniquement si une heure limite a du sens (ex. "avant 8h" → "08:00").
+- Tu peux émettre PLUSIEURS lignes d'affilée (ex. un programme de 4 tâches = 4 lignes).
+- Dans ton texte, parle au passé accompli : « C'est ajouté », « Je te l'ai créée ».
+- N'annonce JAMAIS une tâche sans émettre sa ligne d'action correspondante.
+
+Émets ces lignes dès que l'utilisateur demande d'ajouter/créer/planifier quelque
+chose, OU dès que tu proposes toi-même un programme ou des tâches concrètes.
+N'émets rien si la conversation est purement bavarde, informative ou émotionnelle.
 
 Dossier de l'utilisateur (données réelles, à jour) :
 ${buildDossier(ctx)}`;
 }
 
+const ACTION_RE = /\[ACTION:\s*(add-quest|add-daily)\s*:\s*(\{[\s\S]*?\})\s*\]/g;
+
+/**
+ * Extrait TOUTES les actions du texte, où qu'elles soient (les modèles les
+ * placent parfois au milieu, ou en émettent plusieurs). Tolère les variations
+ * d'espacement et les blocs de code markdown autour.
+ */
 function parseAction(raw: string): { text: string; actions?: OracleAction[] } {
-  const m = raw.match(/\[ACTION:(add-quest|add-daily):(\{[\s\S]*?\})\]\s*$/);
-  if (!m) return { text: raw.trim() };
-  try {
-    const payload = JSON.parse(m[2]);
-    return { text: raw.slice(0, m.index).trim(), actions: [{ kind: m[1] as 'add-quest' | 'add-daily', payload }] };
-  } catch {
-    return { text: raw.replace(m[0], '').trim() };
+  const actions: OracleAction[] = [];
+  let text = raw;
+  for (const m of raw.matchAll(ACTION_RE)) {
+    try {
+      const payload = JSON.parse(m[2]);
+      if (payload && typeof payload.title === 'string' && payload.title.trim()) {
+        actions.push({ kind: m[1] as 'add-quest' | 'add-daily', payload });
+      }
+    } catch {
+      /* payload illisible : on retire quand même le marqueur du texte affiché */
+    }
+    text = text.replace(m[0], '');
   }
+  // nettoyage des résidus de markdown/ponctuation laissés par le retrait
+  text = text
+    .replace(/```[a-z]*\s*```/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return actions.length > 0 ? { text, actions } : { text };
 }
 
 async function rawFetch(url: string, body: string, headers: Record<string, string>): Promise<{ status: number; text: string }> {

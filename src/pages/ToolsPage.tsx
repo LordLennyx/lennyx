@@ -7,6 +7,7 @@ import { speak, stopSpeaking } from '../lib/voice';
 import ShareCardButton from '../components/ShareCardButton';
 import { levelFromXp } from '../game/xp';
 import { notifyNow } from '../lib/notify';
+import BackgroundPresence from '../components/BackgroundPresence';
 
 type Tab = 'chrono' | 'pomodoro' | 'alarms' | 'steps' | 'breathing';
 
@@ -446,6 +447,7 @@ function StepsTab() {
   const profile = useStore((s) => s.profile);
   const addManualSteps = useStore((s) => s.addManualSteps);
   const setStepsGoal = useStore((s) => s.setStepsGoal);
+  const backgroundOn = profile.background.enabled;
   const [manual, setManual] = useState('');
   const t = todayStr();
   const today = stepsOn(profile, t);
@@ -484,8 +486,9 @@ function StepsTab() {
           </div>
         </div>
         <p className="muted" style={{ marginTop: 12 }}>
-          Le capteur compte quand l'application est ouverte (téléphone en poche, écran allumé ou
-          non selon l'appareil). Ajoute le reste à la main — l'honnêteté est ta première quête.
+          {backgroundOn
+            ? 'Le capteur matériel compte en continu, application fermée et écran éteint compris.'
+            : 'Sans la présence permanente, le comptage ne fonctionne que pendant que Lennyx est ouvert. Tu peux compléter à la main.'}
         </p>
         <div className="row" style={{ justifyContent: 'center', marginTop: 10 }}>
           <input
@@ -535,6 +538,9 @@ function StepsTab() {
           <div className="label">Total de carrière</div>
         </div>
       </div>
+
+      <h3 className="section-title"><Icon name="heart" size={13} /> Comptage en arrière-plan</h3>
+      <BackgroundPresence />
     </>
   );
 }

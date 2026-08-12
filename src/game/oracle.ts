@@ -28,6 +28,7 @@ export interface OracleAction {
     timeLimit?: string;
     isEvent?: boolean;
     rubriques?: string[];
+    count?: number; // nombre de tâches à générer (generate-day)
   };
 }
 
@@ -542,11 +543,12 @@ export function answer(input: string, ctx: OracleContext): OracleReply {
 
   if (/(conseil|suggere|propose|idee)/.test(s)) {
     const sugg = suggestTemplates(ctx, 3);
+    if (sugg.length === 0)
+      return { text: 'Tu as déjà tout couvert pour aujourd’hui. La récupération fait partie de l’entraînement.' };
+    // l'Oracle agit : il ajoute réellement ce qu'il conseille
     return {
-      text:
-        sugg.length === 0
-          ? 'Tu as déjà tout couvert pour aujourd’hui. La récupération fait partie de l’entraînement.'
-          : `Vu l'heure et ton profil, je te suggère :\n${fmtList(sugg.map((t) => t.title))}\n\nDis « génère ma journée » pour que je les ajoute.`,
+      text: `Vu l'heure et ton profil, je t'ai ajouté :\n${fmtList(sugg.map((t) => t.title))}`,
+      actions: [{ kind: 'generate-day', payload: { count: 3 } }],
     };
   }
 

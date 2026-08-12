@@ -9,6 +9,7 @@ import { listVoices, speak, type VoiceOption } from '../lib/voice';
 import { GEMINI_MODELS, GROQ_MODELS, defaultModelFor } from '../lib/llmOracle';
 import { encryptText, decryptText, isEncryptedPayload } from '../lib/crypto';
 import CloudSyncSection from '../components/CloudSyncSection';
+import BackgroundPresence from '../components/BackgroundPresence';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -207,20 +208,18 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <label className="row" style={{ gap: 10, marginBottom: 10 }}>
-              <span className="muted" style={{ width: 210 }}>Rappel des chronométrées</span>
-              <select
-                className="input" style={{ width: 170 }}
-                value={profile.notify.lead}
-                onChange={(e) => setNotify({ lead: Number(e.target.value) })}
-              >
-                <option value={0}>Désactivé</option>
-                <option value={5}>5 min avant</option>
-                <option value={15}>15 min avant</option>
-                <option value={30}>30 min avant</option>
-                <option value={60}>1 h avant</option>
-              </select>
-            </label>
+            <div className="card" style={{ background: 'var(--panel2)', marginBottom: 12, padding: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>
+                Escalade automatique des rappels
+              </div>
+              <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                Plus besoin de choisir une avance fixe : Lennyx calcule les rappels selon la
+                <strong> difficulté</strong> de chaque tâche et le <strong>temps restant</strong>.
+                Une tâche facile est rappelée à 15 et 5 min ; une épique dès 2 h avant, puis de
+                plus en plus serré jusqu'à la dernière minute. Le ton et la sonnerie changent en
+                cours de route : calme, puis pressant, puis sanction.
+              </p>
+            </div>
 
             <label className="row" style={{ gap: 10, cursor: 'pointer', marginBottom: 10 }}>
               <input type="checkbox" checked={profile.notify.lastCall} onChange={(e) => setNotify({ lastCall: e.target.checked })} />
@@ -260,9 +259,9 @@ export default function SettingsPage() {
             <span className="muted">Intensité des relances</span>
             <div className="row" style={{ marginTop: 8 }}>
               {([
-                ['discret', 'Discret', 'le strict nécessaire'],
-                ['normal', 'Normal', 'rappels et briefing'],
-                ['duolingo', 'Duolingo 😈', 'relances de midi, culpabilisation affectueuse, double sentinelle'],
+                ['discret', 'Discret', 'deux rappels par tâche, rien de plus'],
+                ['normal', 'Normal', 'escalade complète, briefing et sentinelle'],
+                ['duolingo', 'Implacable', 'escalade renforcée, relances horaires, rappels après coup, double sentinelle et avertissement de minuit'],
               ] as const).map(([id, label, desc]) => (
                 <button
                   key={id}
@@ -274,6 +273,13 @@ export default function SettingsPage() {
                 </button>
               ))}
             </div>
+            <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+              {profile.notify.intensity === 'duolingo'
+                ? 'Mode implacable : relances toutes les heures tant qu’une tâche traîne, rappels jusqu’à une heure après l’échéance, et ultime avertissement à 23 h. Tu l’auras voulu.'
+                : profile.notify.intensity === 'normal'
+                  ? 'Équilibré : chaque tâche est rappelée plusieurs fois selon sa difficulté, sans harcèlement.'
+                  : 'Minimal : seulement les deux derniers rappels avant chaque échéance.'}
+            </p>
           </>
         )}
       </div>
@@ -301,9 +307,10 @@ export default function SettingsPage() {
         <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
           Clé gratuite : {profile.llm.provider === 'groq' ? 'console.groq.com/keys' : 'aistudio.google.com/apikey'}
         </p>
-        <div className="row" style={{ flexWrap: 'nowrap' }}>
+        <div className="row">
           <input
-            className="input grow" type="password" placeholder={`Colle ta clé API ${profile.llm.provider === 'groq' ? 'Groq' : 'Gemini'} ici`}
+            className="input" style={{ flex: '2 1 220px' }} type="password"
+            placeholder={`Colle ta clé API ${profile.llm.provider === 'groq' ? 'Groq' : 'Gemini'} ici`}
             value={apiKeyDraft} onChange={(e) => setApiKeyDraft(e.target.value)}
           />
           <button className="btn small primary" onClick={() => { setLLM({ apiKey: apiKeyDraft.trim() }); pushToast('check', apiKeyDraft.trim() ? 'Oracle connecté' : 'Clé retirée — retour au mode local', 'info'); }}>
@@ -384,6 +391,8 @@ export default function SettingsPage() {
       </div>
 
       <SyncSection />
+
+      <BackgroundPresence />
 
       <div className="card">
         <SectionTitle>Animations</SectionTitle>
@@ -484,7 +493,7 @@ export default function SettingsPage() {
       </div>
 
       <p className="muted" style={{ marginTop: 20, textAlign: 'center', letterSpacing: '0.15em', fontSize: 11 }}>
-        LENNYX v0.6.0 — ORDRE &amp; GLOIRE
+        LENNYX v0.7.0 — ORDRE &amp; GLOIRE
       </p>
     </div>
   );
