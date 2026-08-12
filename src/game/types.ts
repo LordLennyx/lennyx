@@ -165,7 +165,12 @@ export interface Profile {
   };
   steps: {
     goal: number; // objectif quotidien
-    counted: Record<string, number>; // date -> pas comptés par le capteur
+    // Les deux capteurs mesurent la MÊME chose et sont donc stockés séparément :
+    // on retient le maximum des deux, jamais leur somme (ce serait du double
+    // comptage), et surtout jamais l'un à la place de l'autre — le service natif
+    // repart de zéro à son démarrage et écraserait sinon le total de la journée.
+    counted: Record<string, number>; // date -> pas de l'accéléromètre (app ouverte)
+    native: Record<string, number>; // date -> pas du service Android (continu)
     manual: Record<string, number>; // date -> pas ajoutés à la main
     bestDay: number;
   };

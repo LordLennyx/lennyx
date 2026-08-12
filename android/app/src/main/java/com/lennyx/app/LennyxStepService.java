@@ -97,18 +97,27 @@ public class LennyxStepService extends Service implements SensorEventListener {
 
         String baselineDay = prefs.getString("baselineDay", "");
         long baseline = prefs.getLong("baseline", -1);
+        // « Acquis » du jour : ce qui a déjà été compté aujourd'hui avant que ce
+        // service ne prenne la main — pas relevés par l'accéléromètre et transmis
+        // au démarrage, ou pas déjà enregistrés par le service avant un reboot.
+        // Sans lui, le compteur repartirait de zéro et resterait figé le temps de
+        // rattraper l'existant (symptôme « le podomètre ne compte plus »).
+        int offset = prefs.getInt("offset-" + day, 0);
 
-        // Nouveau jour, premier démarrage, ou redémarrage du téléphone
-        // (le compteur matériel repart de zéro) : on recale la référence.
+        // Un seul recalage, trois causes possibles : premier démarrage, nouveau
+        // jour, ou redémarrage du téléphone (le compteur matériel repart à zéro).
+        // Les clés étant datées, un nouveau jour a naturellement un acquis nul.
         if (!day.equals(baselineDay) || baseline < 0 || total < baseline) {
+            offset = Math.max(offset, prefs.getInt("steps-" + day, 0));
             baseline = total;
             prefs.edit()
                 .putString("baselineDay", day)
                 .putLong("baseline", baseline)
+                .putInt("offset-" + day, offset)
                 .apply();
         }
 
-        int stepsToday = (int) Math.max(0, total - baseline);
+        int stepsToday = offset + (int) Math.max(0, total - baseline);
         int previous = prefs.getInt("steps-" + day, 0);
         if (stepsToday <= previous) return; // rien de neuf, on évite d'écrire
 

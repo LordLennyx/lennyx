@@ -111,10 +111,13 @@ export default function App() {
     if (!profile.onboarding.done) return; // on n'interrompt pas le tutoriel
     bootedRef.current = true;
     void (async () => {
+      // on transmet les pas déjà acquis : le service reprend le compteur en
+      // cours au lieu de repartir de zéro
+      const acquis = stepsOn(profile, todayStr());
       if (profile.background.enabled) {
-        await startBackground(); // relance silencieuse
+        await startBackground(acquis); // relance silencieuse
       } else if (!profile.background.askedOnce) {
-        const res = await startBackground();
+        const res = await startBackground(acquis);
         setBackground({ enabled: res.running, askedOnce: true });
       }
     })();

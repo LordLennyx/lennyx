@@ -42,7 +42,9 @@ function readSnapshot(): Snapshot | null {
     const dailies: Array<{ days: number[]; lastCompletedDate?: string }> = data.state?.dailies ?? [];
     if (!p) return null;
     const t = todayStr();
-    const stepsToday = (p.steps?.counted?.[t] ?? 0) + (p.steps?.manual?.[t] ?? 0);
+    // même règle que l'application : le meilleur des deux capteurs, plus le manuel
+    const stepsToday =
+      Math.max(p.steps?.counted?.[t] ?? 0, p.steps?.native?.[t] ?? 0) + (p.steps?.manual?.[t] ?? 0);
     const pending = dailies.filter((d) => isScheduledOn(d.days ?? [], t) && d.lastCompletedDate !== t).length;
     let nextAlarm: string | null = null;
     if (p.alarms?.wake?.on && isScheduledOn(p.alarms.wake.days ?? [], t)) nextAlarm = p.alarms.wake.time;

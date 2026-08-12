@@ -188,6 +188,30 @@ Deux risques de plantage repérés à la relecture et corrigés au passage : dep
 démarrer un service de premier plan de type *health* sans la permission d'activité physique lève
 une exception fatale — au démarrage du téléphone comme depuis l'application.
 
+### v0.7.2 — les deux compteurs cohabitent enfin
+
+Test sur téléphone : en mode limité, les pas montaient dans l'app mais rien en dehors ; en mode
+permanent, plus rien du tout — permissions pourtant toutes accordées. Deux causes, une seule
+racine : **les deux sources de comptage écrivaient dans la même case**.
+
+- **Compteurs séparés.** L'accéléromètre et le service natif ont désormais chacun leur registre,
+  et l'affichage prend le **maximum** des deux (jamais la somme, sinon chaque pas serait compté
+  deux fois quand l'app est ouverte). Auparavant, le service — qui repart de zéro à son
+  démarrage — devait « rattraper » les centaines de pas déjà relevés par l'accéléromètre avant
+  que le compteur ne bouge d'un seul pas. Exactement le symptôme observé.
+- **Les deux sources tournent en parallèle.** Plus de bascule de l'une à l'autre : la bascule
+  laissait forcément une fenêtre sans aucun compteur actif — c'était la régression de la v0.7.0.
+  L'accéléromètre travaille tant que l'app est ouverte, le service travaille tout le temps.
+- **L'acquis du jour est transmis au service** à son démarrage : il reprend le comptage là où
+  l'accéléromètre l'avait laissé, au lieu de repartir de zéro.
+- La notification permanente **affiche le nombre de pas** et se rafraîchit chaque minute : figée
+  à « 0 pas », elle laissait croire que le service ne faisait rien.
+
+La chaîne complète (premier démarrage, marche app fermée, deux sources simultanées, redémarrage
+du téléphone, passage à minuit) est vérifiée par une simulation qui rejoue la logique Java —
+elle a d'ailleurs attrapé un dernier bug avant livraison : l'acquis transmis était effacé au tout
+premier démarrage du service.
+
 ## 🛠️ Stack
 
 | Couche | Techno |

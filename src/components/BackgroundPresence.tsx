@@ -3,7 +3,8 @@
 // aucune piste sur la cause (service coupé ? permission ? capteur absent ?).
 
 import { useEffect, useState } from 'react';
-import { useStore } from '../store/useStore';
+import { useStore, stepsOn } from '../store/useStore';
+import { todayStr } from '../game/engine';
 import { Icon } from './Icon';
 import {
   backgroundSupported, startBackground, stopBackground, backgroundStatus, type BackgroundStatus,
@@ -39,7 +40,9 @@ export default function BackgroundPresence({ compact = false }: { compact?: bool
         setBackground({ enabled: false });
         pushToast('moon', 'Présence permanente désactivée — le comptage reprendra à l’ouverture', 'info');
       } else {
-        const res = await startBackground();
+        // le service reprend le compteur du jour là où il en est
+        const st = useStore.getState();
+        const res = await startBackground(stepsOn(st.profile, todayStr()));
         if (res.running) {
           setBackground({ enabled: true, askedOnce: true });
           pushToast('check', 'Lennyx veille désormais en permanence', 'info');

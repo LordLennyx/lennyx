@@ -16,7 +16,7 @@ export interface BackgroundStatus {
 }
 
 interface LennyxBackgroundPlugin {
-  start(): Promise<{ running: boolean; denied?: boolean }>;
+  start(options: { offsetToday?: number }): Promise<{ running: boolean; denied?: boolean }>;
   stop(): Promise<{ running: boolean }>;
   status(): Promise<BackgroundStatus>;
   getSteps(): Promise<{ days: Record<string, number> }>;
@@ -27,10 +27,15 @@ const Background = registerPlugin<LennyxBackgroundPlugin>('LennyxBackground');
 export const backgroundSupported = (): boolean =>
   Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 
-export async function startBackground(): Promise<{ running: boolean; denied?: boolean }> {
+/**
+ * Démarre le service. `offsetToday` transmet les pas déjà comptés aujourd'hui :
+ * le service en tient compte au lieu de repartir de zéro, sinon le compteur
+ * resterait figé le temps qu'il rattrape l'accéléromètre.
+ */
+export async function startBackground(offsetToday = 0): Promise<{ running: boolean; denied?: boolean }> {
   if (!backgroundSupported()) return { running: false };
   try {
-    return await Background.start();
+    return await Background.start({ offsetToday: Math.max(0, Math.round(offsetToday)) });
   } catch {
     return { running: false };
   }

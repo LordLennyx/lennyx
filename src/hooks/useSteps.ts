@@ -1,67 +1,47 @@
 // ── Podomètre ─────────────────────────────────────────────────────────────
-// Deux sources possibles, et JAMAIS de trou entre les deux :
+// Deux sources tournent EN PARALLÈLE, et c'est volontaire :
 //
-//  • Le service Android de premier plan (LennyxStepService) compte avec le
-//    capteur MATÉRIEL, écran éteint et application fermée comprises. Quand il
-//    tourne vraiment, il fait autorité et l'accéléromètre reste muet.
+//  • Le service Android (LennyxStepService) compte avec le capteur MATÉRIEL,
+//    écran éteint et application fermée comprises. C'est lui qui donne les
+//    grands totaux de la journée.
 //
-//  • Sinon — présence coupée, permission refusée, téléphone sans podomètre
-//    matériel, ou simplement Windows/web — l'accéléromètre prend la main et
-//    compte pendant que l'application est ouverte.
+//  • L'accéléromètre compte pendant que l'application est ouverte. Il sert de
+//    filet : téléphone sans podomètre matériel, permission refusée, service
+//    arrêté par le constructeur, capteur silencieux…
 //
-// ⚠ Régression corrigée en v0.7.1 : l'accéléromètre était coupé sur Android
-// dès que la plateforme le permettait, alors que le service, lui, n'était
-// démarré que si l'utilisateur avait activé la présence. Résultat : aucune
-// source active, plus un seul pas compté. La bascule dépend désormais de
-// l'état RÉEL du service, pas de la plateforme.
+// Aucun risque de double comptage : les deux mesurent la même marche et
+// `stepsOn` retient le MAXIMUM des deux, jamais leur somme.
+//
+// ⚠ Historique à ne pas répéter : en v0.7.0 l'accéléromètre était coupé dès
+// que la plateforme était Android alors que le service, lui, n'était pas
+// démarré — plus aucune source. En v0.7.1 les deux sources partageaient un
+// même compteur, et le service (qui repart de zéro) devait « rattraper »
+// l'accéléromètre avant que le total ne bouge. D'où la séparation stricte.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Motion } from '@capacitor/motion';
 import { useStore } from '../store/useStore';
-import { backgroundSupported, nativeSteps, nativeCountingActive } from '../lib/background';
+import { backgroundSupported, nativeSteps } from '../lib/background';
 
 const PEAK_THRESHOLD = 1.4; // m/s² au-dessus de la gravité lissée
 const MIN_STEP_MS = 280; // cadence max ~3.5 pas/s
 const FLUSH_MS = 4000;
-const NATIVE_POLL_MS = 20000;
+const NATIVE_POLL_MS = 15000;
 
 export function useSteps() {
   const addSteps = useStore((s) => s.addSteps);
   const setNativeSteps = useStore((s) => s.setNativeSteps);
   const backgroundEnabled = useStore((s) => s.profile.background.enabled);
 
-  // Optimiste au démarrage pour éviter que l'accéléromètre ne s'allume une
-  // fraction de seconde alors que le service tourne déjà (double comptage).
-  const [nativeActive, setNativeActive] = useState(() => backgroundSupported() && backgroundEnabled);
-
   const buffer = useRef(0);
   const avg = useRef(9.81);
   const lastStep = useRef(0);
   const above = useRef(false);
 
-  // ── Qui compte, en vérité ? ─────────────────────────────────────────────
-  useEffect(() => {
-    let alive = true;
-    const refresh = async () => {
-      const active = await nativeCountingActive();
-      if (alive) setNativeActive(active);
-    };
-    void refresh();
-    // l'utilisateur peut couper le service depuis Android : on revérifie au retour
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void refresh();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      alive = false;
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [backgroundEnabled]);
-
   // ── Source 1 : le service natif (rapatriement des compteurs) ────────────
   useEffect(() => {
-    if (!nativeActive) return;
+    if (!backgroundSupported()) return;
     let alive = true;
     const sync = async () => {
       const days = await nativeSteps();
@@ -69,6 +49,8 @@ export function useSteps() {
     };
     void sync();
     const iv = setInterval(sync, NATIVE_POLL_MS);
+    // au retour dans l'application, on rapatrie tout de suite ce qui a été
+    // marché pendant qu'elle était fermée
     const onVisible = () => {
       if (document.visibilityState === 'visible') void sync();
     };
@@ -78,14 +60,12 @@ export function useSteps() {
       clearInterval(iv);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [nativeActive, setNativeSteps]);
+  }, [setNativeSteps, backgroundEnabled]);
 
-  // ── Source 2 : l'accéléromètre, dès que le natif ne compte pas ──────────
+  // ── Source 2 : l'accéléromètre, tant que l'application est ouverte ──────
   useEffect(() => {
-    if (nativeActive) return;
     let removeListener: (() => void) | null = null;
     let flushTimer: ReturnType<typeof setInterval> | null = null;
-    let stopped = false;
 
     const onMagnitude = (m: number) => {
       avg.current = avg.current * 0.96 + m * 0.04;
@@ -103,7 +83,6 @@ export function useSteps() {
     };
 
     const flush = () => {
-      if (stopped) return;
       if (buffer.current > 0) {
         addSteps(buffer.current);
         buffer.current = 0;
@@ -139,8 +118,6 @@ export function useSteps() {
       if (removeListener) removeListener();
       if (flushTimer) clearInterval(flushTimer);
       flush();
-      stopped = true;
-      buffer.current = 0;
     };
-  }, [nativeActive, addSteps]);
+  }, [addSteps]);
 }

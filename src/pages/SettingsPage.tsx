@@ -493,7 +493,7 @@ export default function SettingsPage() {
       </div>
 
       <p className="muted" style={{ marginTop: 20, textAlign: 'center', letterSpacing: '0.15em', fontSize: 11 }}>
-        LENNYX v0.7.1 — ORDRE &amp; GLOIRE
+        LENNYX v0.7.2 — ORDRE &amp; GLOIRE
       </p>
     </div>
   );

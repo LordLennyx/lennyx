@@ -42,12 +42,29 @@ public class LennyxBackgroundPlugin extends Plugin {
             == PackageManager.PERMISSION_GRANTED;
     }
 
+    /**
+     * Transmet au service les pas déjà comptés aujourd'hui (par l'accéléromètre),
+     * pour qu'il démarre avec cet acquis au lieu de repartir de zéro.
+     */
+    private void applyOffset(PluginCall call) {
+        Integer offset = call.getInt("offsetToday");
+        if (offset == null || offset <= 0) return;
+        String day = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(new java.util.Date());
+        SharedPreferences p = prefs();
+        int known = Math.max(p.getInt("offset-" + day, 0), p.getInt("steps-" + day, 0));
+        if (offset > known) {
+            p.edit().putInt("offset-" + day, offset).apply();
+        }
+    }
+
     @PluginMethod
     public void start(PluginCall call) {
         if (!hasActivityPermission()) {
             requestPermissionForAlias("activity", call, "activityPermissionCallback");
             return;
         }
+        applyOffset(call);
         launchService();
         JSObject ret = new JSObject();
         ret.put("running", true);
@@ -58,6 +75,7 @@ public class LennyxBackgroundPlugin extends Plugin {
     private void activityPermissionCallback(PluginCall call) {
         JSObject ret = new JSObject();
         if (hasActivityPermission()) {
+            applyOffset(call);
             launchService();
             ret.put("running", true);
         } else {

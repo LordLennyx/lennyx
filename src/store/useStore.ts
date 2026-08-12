@@ -11,6 +11,7 @@ import {
   type Difficulty, type QuestType,
 } from '../game/engine';
 import { levelFromXp } from '../game/xp';
+import { stepsOn } from '../game/steps';
 import { ACHIEVEMENTS, EFFECTS, SIGILS, THEMES, TITLES, unlocksAtLevel } from '../game/content';
 import {
   answer, briefing, dailiesAtRisk, suggestTemplates, tplRubriqueId,
@@ -139,7 +140,7 @@ const defaultProfile = (): Profile => ({
     sentinelTime: '19:00', celebrate: true, intensity: 'normal',
   },
   voice: { spoken: false, voiceURI: '', rate: 1, pitch: 1 },
-  steps: { goal: 8000, counted: {}, manual: {}, bestDay: 0 },
+  steps: { goal: 8000, counted: {}, native: {}, manual: {}, bestDay: 0 },
   background: { enabled: false, askedOnce: false },
   alarms: {
     wake: { on: false, time: '07:00', days: [], melody: 'aube', volume: 0.8 },
@@ -156,10 +157,7 @@ const defaultProfile = (): Profile => ({
   history: {},
 });
 
-/** Pas du jour (capteur + manuel). */
-export function stepsOn(p: Profile, date: string): number {
-  return (p.steps.counted[date] ?? 0) + (p.steps.manual[date] ?? 0);
-}
+export { stepsOn } from '../game/steps';
 
 /** Un effet est-il utilisable ? (gratuit niveau atteint, ou acheté) */
 export function effectAvailable(p: Profile, level: number, id: string): boolean {
@@ -883,12 +881,16 @@ export const useStore = create<LennyxState>()(
           const counted = { ...s.profile.steps.counted, [t]: (s.profile.steps.counted[t] ?? 0) + n };
           // borne l'historique à 90 jours
           for (const k of Object.keys(counted)) if (k < addDays(t, -90)) delete counted[k];
-          const today = (counted[t] ?? 0) + (s.profile.steps.manual[t] ?? 0);
+          const before = stepsOn(s.profile, t);
+          const updated = { ...s.profile, steps: { ...s.profile.steps, counted } };
+          const today = stepsOn(updated, t);
           set({
             profile: checkAchievements({
-              ...s.profile,
-              steps: { ...s.profile.steps, counted, bestDay: Math.max(s.profile.steps.bestDay, today) },
-              counters: { ...s.profile.counters, totalSteps: s.profile.counters.totalSteps + n },
+              ...updated,
+              steps: { ...updated.steps, bestDay: Math.max(s.profile.steps.bestDay, today) },
+              // n'ajoute au total de carrière que le gain réel : si le service
+              // natif menait déjà la journée, l'accéléromètre n'apporte rien
+              counters: { ...s.profile.counters, totalSteps: s.profile.counters.totalSteps + Math.max(0, today - before) },
             }),
           });
         },
@@ -898,7 +900,7 @@ export const useStore = create<LennyxState>()(
           const t = todayStr();
           const manual = { ...s.profile.steps.manual, [t]: (s.profile.steps.manual[t] ?? 0) + n };
           for (const k of Object.keys(manual)) if (k < addDays(t, -90)) delete manual[k];
-          const today = (s.profile.steps.counted[t] ?? 0) + (manual[t] ?? 0);
+          const today = stepsOn({ ...s.profile, steps: { ...s.profile.steps, manual } }, t);
           pushToast('heart', `+${n} pas ajoutés`, 'info');
           set({
             profile: checkAchievements({
@@ -916,23 +918,31 @@ export const useStore = create<LennyxState>()(
         setNativeSteps: (days) => {
           const s = get();
           const t = todayStr();
-          const counted = { ...s.profile.steps.counted };
+          const native = { ...(s.profile.steps.native ?? {}) };
+          let changed = false;
           let gained = 0;
+
           for (const [day, value] of Object.entries(days)) {
             if (day < addDays(t, -90)) continue;
-            const previous = counted[day] ?? 0;
-            if (value > previous) {
-              gained += value - previous;
-              counted[day] = value;
-            }
+            const previous = native[day] ?? 0;
+            if (value <= previous) continue;
+            // gain de carrière : seulement ce que cette source apporte AU-DELÀ
+            // de ce que l'accéléromètre avait déjà relevé pour cette journée
+            const before = stepsOn(s.profile, day);
+            native[day] = value;
+            const after = Math.max(s.profile.steps.counted[day] ?? 0, value) + (s.profile.steps.manual[day] ?? 0);
+            gained += Math.max(0, after - before);
+            changed = true;
           }
-          if (gained === 0) return;
-          for (const k of Object.keys(counted)) if (k < addDays(t, -90)) delete counted[k];
-          const today = (counted[t] ?? 0) + (s.profile.steps.manual[t] ?? 0);
+          if (!changed) return;
+
+          for (const k of Object.keys(native)) if (k < addDays(t, -90)) delete native[k];
+          const updated = { ...s.profile, steps: { ...s.profile.steps, native } };
+          const today = stepsOn(updated, t);
           set({
             profile: checkAchievements({
-              ...s.profile,
-              steps: { ...s.profile.steps, counted, bestDay: Math.max(s.profile.steps.bestDay, today) },
+              ...updated,
+              steps: { ...updated.steps, bestDay: Math.max(s.profile.steps.bestDay, today) },
               counters: { ...s.profile.counters, totalSteps: s.profile.counters.totalSteps + gained },
             }),
           });
@@ -1137,7 +1147,7 @@ export const useStore = create<LennyxState>()(
     },
     {
       name: 'lennyx-save',
-      version: 7,
+      version: 8,
       partialize: (s) => ({
         profile: s.profile,
         quests: s.quests,
@@ -1260,6 +1270,16 @@ export const useStore = create<LennyxState>()(
             ...data.profile,
             background: { ...def.background, ...data.profile.background },
             counters: { ...defaultCounters(), ...data.profile.counters },
+          };
+        }
+        if (version < 8 && data?.profile) {
+          // v8 : les pas du service natif ont leur propre compteur, distinct de
+          // l'accéléromètre (les mélanger figeait le total, cf. v0.7.1)
+          const def = defaultProfile();
+          data.profile = {
+            ...def,
+            ...data.profile,
+            steps: { ...def.steps, ...data.profile.steps, native: data.profile.steps?.native ?? {} },
           };
         }
         return data as any;

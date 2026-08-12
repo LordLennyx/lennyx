@@ -9,6 +9,7 @@ import { isScheduledOn, todayStr, addDays } from './engine';
 import { LIBRARY, type TaskTemplate } from './library';
 import { levelFromXp, xpForLevel } from './xp';
 import { ACHIEVEMENTS } from './content';
+import { stepsOn } from './steps';
 
 export interface OracleContext {
   profile: Profile;
@@ -128,11 +129,8 @@ export function wakeStats(p: Profile): { avg: string | null; count: number; earl
 export function stepsWeek(p: Profile): { today: number; week: number; avg: number } {
   const t = todayStr();
   let week = 0;
-  for (let i = 0; i < 7; i++) {
-    const d = addDays(t, -i);
-    week += (p.steps.counted[d] ?? 0) + (p.steps.manual[d] ?? 0);
-  }
-  return { today: (p.steps.counted[t] ?? 0) + (p.steps.manual[t] ?? 0), week, avg: Math.round(week / 7) };
+  for (let i = 0; i < 7; i++) week += stepsOn(p, addDays(t, -i));
+  return { today: stepsOn(p, t), week, avg: Math.round(week / 7) };
 }
 
 function chronoFor(query: string, log: TimeLogEntry[]): { label: string; count: number; avgMin: number } | null {
