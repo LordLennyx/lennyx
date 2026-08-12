@@ -1,19 +1,25 @@
 // ── Podomètre ─────────────────────────────────────────────────────────────
-// Deux régimes selon la plateforme :
+// Deux sources possibles, et JAMAIS de trou entre les deux :
 //
-//  • Android : le service de premier plan (LennyxStepService) compte avec le
-//    capteur MATÉRIEL, écran éteint et application fermée comprises. Il fait
-//    autorité : on se contente de rapatrier ses compteurs. Aucun comptage
-//    JavaScript, donc aucun risque de double comptage.
+//  • Le service Android de premier plan (LennyxStepService) compte avec le
+//    capteur MATÉRIEL, écran éteint et application fermée comprises. Quand il
+//    tourne vraiment, il fait autorité et l'accéléromètre reste muet.
 //
-//  • Web / Windows : pas de service possible — on retombe sur l'accéléromètre,
-//    qui ne compte que pendant que l'application est ouverte.
+//  • Sinon — présence coupée, permission refusée, téléphone sans podomètre
+//    matériel, ou simplement Windows/web — l'accéléromètre prend la main et
+//    compte pendant que l'application est ouverte.
+//
+// ⚠ Régression corrigée en v0.7.1 : l'accéléromètre était coupé sur Android
+// dès que la plateforme le permettait, alors que le service, lui, n'était
+// démarré que si l'utilisateur avait activé la présence. Résultat : aucune
+// source active, plus un seul pas compté. La bascule dépend désormais de
+// l'état RÉEL du service, pas de la plateforme.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Motion } from '@capacitor/motion';
 import { useStore } from '../store/useStore';
-import { backgroundSupported, nativeSteps } from '../lib/background';
+import { backgroundSupported, nativeSteps, nativeCountingActive } from '../lib/background';
 
 const PEAK_THRESHOLD = 1.4; // m/s² au-dessus de la gravité lissée
 const MIN_STEP_MS = 280; // cadence max ~3.5 pas/s
@@ -23,14 +29,39 @@ const NATIVE_POLL_MS = 20000;
 export function useSteps() {
   const addSteps = useStore((s) => s.addSteps);
   const setNativeSteps = useStore((s) => s.setNativeSteps);
+  const backgroundEnabled = useStore((s) => s.profile.background.enabled);
+
+  // Optimiste au démarrage pour éviter que l'accéléromètre ne s'allume une
+  // fraction de seconde alors que le service tourne déjà (double comptage).
+  const [nativeActive, setNativeActive] = useState(() => backgroundSupported() && backgroundEnabled);
+
   const buffer = useRef(0);
   const avg = useRef(9.81);
   const lastStep = useRef(0);
   const above = useRef(false);
 
-  // ── Android : le service natif fait autorité ────────────────────────────
+  // ── Qui compte, en vérité ? ─────────────────────────────────────────────
   useEffect(() => {
-    if (!backgroundSupported()) return;
+    let alive = true;
+    const refresh = async () => {
+      const active = await nativeCountingActive();
+      if (alive) setNativeActive(active);
+    };
+    void refresh();
+    // l'utilisateur peut couper le service depuis Android : on revérifie au retour
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [backgroundEnabled]);
+
+  // ── Source 1 : le service natif (rapatriement des compteurs) ────────────
+  useEffect(() => {
+    if (!nativeActive) return;
     let alive = true;
     const sync = async () => {
       const days = await nativeSteps();
@@ -47,13 +78,14 @@ export function useSteps() {
       clearInterval(iv);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [setNativeSteps]);
+  }, [nativeActive, setNativeSteps]);
 
-  // ── Web / Windows : accéléromètre, application ouverte seulement ────────
+  // ── Source 2 : l'accéléromètre, dès que le natif ne compte pas ──────────
   useEffect(() => {
-    if (backgroundSupported()) return; // surtout pas en double sur Android
+    if (nativeActive) return;
     let removeListener: (() => void) | null = null;
     let flushTimer: ReturnType<typeof setInterval> | null = null;
+    let stopped = false;
 
     const onMagnitude = (m: number) => {
       avg.current = avg.current * 0.96 + m * 0.04;
@@ -71,6 +103,7 @@ export function useSteps() {
     };
 
     const flush = () => {
+      if (stopped) return;
       if (buffer.current > 0) {
         addSteps(buffer.current);
         buffer.current = 0;
@@ -106,6 +139,8 @@ export function useSteps() {
       if (removeListener) removeListener();
       if (flushTimer) clearInterval(flushTimer);
       flush();
+      stopped = true;
+      buffer.current = 0;
     };
-  }, [addSteps]);
+  }, [nativeActive, addSteps]);
 }

@@ -42,6 +42,10 @@ public class LennyxStepService extends Service implements SensorEventListener {
     private SensorManager sensorManager;
     private Sensor stepCounter;
     private SharedPreferences prefs;
+    private long lastNotifUpdate = 0;
+
+    /** La notification permanente ne se rafraîchit qu'une fois par minute. */
+    private static final long NOTIF_REFRESH_MS = 60_000;
 
     private static String today() {
         return new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
@@ -118,6 +122,21 @@ public class LennyxStepService extends Service implements SensorEventListener {
             getSharedPreferences(LennyxWidgetProvider.PREFS_NAME, Context.MODE_PRIVATE);
         widgetPrefs.edit().putInt("stepsToday", stepsToday).apply();
         LennyxWidgetProvider.updateAll(this);
+
+        // La notification permanente affiche le compteur : figée à « 0 pas »,
+        // elle donnerait l'impression que le service ne fait rien.
+        long now = System.currentTimeMillis();
+        if (now - lastNotifUpdate >= NOTIF_REFRESH_MS) {
+            lastNotifUpdate = now;
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                try {
+                    nm.notify(NOTIF_ID, buildNotification());
+                } catch (Exception ignored) {
+                    // l'affichage du compteur n'est jamais critique
+                }
+            }
+        }
     }
 
     @Override
@@ -154,12 +173,27 @@ public class LennyxStepService extends Service implements SensorEventListener {
         return b.build();
     }
 
+    /**
+     * ⚠ Depuis Android 14, démarrer un service de premier plan de type « health »
+     * sans la permission ACTIVITY_RECOGNITION lève une SecurityException qui fait
+     * planter l'application. On se replie alors sur un service sans type déclaré
+     * plutôt que de tomber : mieux vaut un comptage dégradé qu'un crash.
+     */
     private void startForegroundCompat() {
         Notification n = buildNotification();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH);
-        } else {
-            startForeground(NOTIF_ID, n);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH);
+            } else {
+                startForeground(NOTIF_ID, n);
+            }
+        } catch (Exception e) {
+            try {
+                startForeground(NOTIF_ID, n);
+            } catch (Exception ignored) {
+                // dernier recours : le service s'arrête proprement au lieu de planter
+                stopSelf();
+            }
         }
     }
 }

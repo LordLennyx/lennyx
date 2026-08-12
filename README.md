@@ -168,6 +168,26 @@ Tu choisis le sens : récupérer la sauvegarde du PC, ou envoyer celle du télé
   formulaire des finances était illisible sur Android), barre de navigation défilante, cibles
   tactiles agrandies, cases à cocher et curseurs aux couleurs du thème.
 
+### v0.7.1 — correctif du podomètre
+
+La v0.7.0 avait introduit une régression : **plus aucun pas n'était compté sur Android**. En
+confiant le comptage au service natif, l'accéléromètre avait été coupé sur toute la plateforme —
+alors que le service, lui, ne démarrait que si la présence permanente était activée à la main,
+et elle était éteinte par défaut. Résultat : aucune source active.
+
+Corrigé en trois points :
+- **L'accéléromètre reprend la main** dès que le service ne compte pas réellement — présence
+  coupée, permission refusée, ou téléphone dépourvu de podomètre matériel. La bascule dépend
+  maintenant de l'état *réel* du service, plus de la simple plateforme.
+- **Le service est relancé à chaque ouverture** (Android peut l'avoir arrêté sans redémarrage)
+  et son activation est proposée dès le premier lancement, au lieu d'être enfouie dans un écran.
+- **Diagnostic visible** dans Outils → Pas : capteur matériel détecté ou non, permission
+  accordée ou non, service actif ou non, et la source de comptage réellement en service.
+
+Deux risques de plantage repérés à la relecture et corrigés au passage : depuis Android 14,
+démarrer un service de premier plan de type *health* sans la permission d'activité physique lève
+une exception fatale — au démarrage du téléphone comme depuis l'application.
+
 ## 🛠️ Stack
 
 | Couche | Techno |

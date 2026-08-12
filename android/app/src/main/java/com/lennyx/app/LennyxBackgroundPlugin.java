@@ -5,6 +5,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
 import android.os.Build;
 
 import com.getcapacitor.JSObject;
@@ -85,11 +87,18 @@ public class LennyxBackgroundPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    /** Tous les téléphones n'ont pas de podomètre matériel : il faut le savoir. */
+    private boolean hasStepSensor() {
+        SensorManager sm = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
+        return sm != null && sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) != null;
+    }
+
     @PluginMethod
     public void status(PluginCall call) {
         JSObject ret = new JSObject();
         ret.put("enabled", prefs().getBoolean(LennyxStepService.KEY_ENABLED, false));
         ret.put("permission", hasActivityPermission());
+        ret.put("hasStepSensor", hasStepSensor());
         ret.put("lastUpdate", prefs().getLong("lastUpdate", 0));
         call.resolve(ret);
     }

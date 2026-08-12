@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from './store/useStore';
 import { levelFromXp } from './game/xp';
 import { THEMES, titleLabel } from './game/content';
@@ -26,6 +26,7 @@ import { setSoundPrefs } from './lib/sound';
 import { startMusic, stopMusic, setMusicMood, setMusicVolume } from './lib/music';
 import { ensurePermission } from './lib/notify';
 import { useOnlineStatus } from './lib/net';
+import { backgroundSupported, startBackground } from './lib/background';
 import { pushWidgetData } from './lib/widget';
 import { stepsOn } from './store/useStore';
 import { isScheduledOn, todayStr } from './game/engine';
@@ -52,6 +53,7 @@ export default function App() {
   const profile = useStore((s) => s.profile);
   const dailies = useStore((s) => s.dailies);
   const reconcile = useStore((s) => s.reconcile);
+  const setBackground = useStore((s) => s.setBackground);
   const online = useOnlineStatus();
   const info = levelFromXp(profile.xp);
   const title = titleLabel(profile.title);
@@ -97,6 +99,26 @@ export default function App() {
       stopMusic();
     };
   }, [profile.audio.music]);
+
+  // ── Présence permanente : le service doit tourner, sinon rien n'est compté ──
+  // Android peut avoir tué le service sans redémarrage du téléphone : on le
+  // relance à chaque ouverture. Et au tout premier usage, on propose son
+  // activation — sans elle, le podomètre serait muet, ce qui n'a aucun sens
+  // pour une application censée accompagner la journée entière.
+  const bootedRef = useRef(false);
+  useEffect(() => {
+    if (!backgroundSupported() || bootedRef.current) return;
+    if (!profile.onboarding.done) return; // on n'interrompt pas le tutoriel
+    bootedRef.current = true;
+    void (async () => {
+      if (profile.background.enabled) {
+        await startBackground(); // relance silencieuse
+      } else if (!profile.background.askedOnce) {
+        const res = await startBackground();
+        setBackground({ enabled: res.running, askedOnce: true });
+      }
+    })();
+  }, [profile.onboarding.done, profile.background.enabled, profile.background.askedOnce, setBackground]);
 
   // widget natif Android : pousse l'instantané à chaque changement pertinent
   useEffect(() => {

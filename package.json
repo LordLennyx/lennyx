@@ -1,7 +1,7 @@
 {
   "name": "lennyx",
   "productName": "Lennyx",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Lennyx — la to-do list gamifiée. Transforme tes tâches en quêtes épiques.",
   "author": "Lens Daniels <lensdaniels237@gmail.com>",
   "private": true,
