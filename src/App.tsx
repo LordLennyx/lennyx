@@ -23,6 +23,7 @@ import { useSteps } from './hooks/useSteps';
 import { useNativeAlarms } from './hooks/useNativeAlarms';
 import { useTimers } from './hooks/useTimers';
 import AlarmOverlay from './components/AlarmOverlay';
+import UpdateBanner from './components/UpdateBanner';
 import Onboarding from './components/Onboarding';
 import { setSoundPrefs } from './lib/sound';
 import { startMusic, stopMusic, setMusicMood, setMusicVolume } from './lib/music';
@@ -50,8 +51,23 @@ const NAV: Array<{ id: PageId; icon: string; label: string }> = [
   { id: 'settings', icon: 'gear', label: 'Réglages' },
 ];
 
+/**
+ * Section demandée au lancement (`?vue=quests`) : c'est ce qui permet aux
+ * raccourcis du manifeste — clic droit sur l'icône du Dock — d'ouvrir Lennyx
+ * directement au bon endroit.
+ */
+function initialPage(): PageId {
+  try {
+    const wanted = new URLSearchParams(window.location.search).get('vue');
+    if (wanted && NAV.some((n) => n.id === wanted)) return wanted as PageId;
+  } catch {
+    /* URL exotique : on ouvre l'accueil */
+  }
+  return 'home';
+}
+
 export default function App() {
-  const [page, setPage] = useState<PageId>('home');
+  const [page, setPage] = useState<PageId>(initialPage);
   const profile = useStore((s) => s.profile);
   const dailies = useStore((s) => s.dailies);
   const reconcile = useStore((s) => s.reconcile);
@@ -72,6 +88,20 @@ export default function App() {
   useSteps();
   useNativeAlarms();
   useTimers();
+
+  // Raccourcis clavier de bureau : Cmd+1…9 (Ctrl ailleurs) pour naviguer.
+  // Une application installée dans le Dock doit se piloter comme les autres.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      const n = Number(e.key);
+      if (!Number.isInteger(n) || n < 1 || n > NAV.length) return;
+      e.preventDefault();
+      setPage(NAV[n - 1].id);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   useEffect(() => {
     if (profile.notify.enabled) void ensurePermission();
   }, [profile.notify.enabled]);
@@ -234,6 +264,7 @@ export default function App() {
       <Toasts />
       <LevelUpModal />
       <AlarmOverlay />
+      <UpdateBanner />
       <BurstFX />
       {!profile.onboarding.done && <Onboarding />}
     </div>

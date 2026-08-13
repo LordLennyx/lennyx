@@ -1,17 +1,52 @@
 {
+  "id": "/lennyx",
   "name": "Lennyx — Ordre & Gloire",
   "short_name": "Lennyx",
   "description": "La to-do list gamifiée : quêtes, XP, streaks, or et gloire.",
   "lang": "fr",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#0a0a0d",
   "theme_color": "#0a0a0d",
+  "categories": ["productivity", "lifestyle", "games"],
+  "prefer_related_applications": false,
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/monogram.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mes quêtes",
+      "short_name": "Quêtes",
+      "description": "Ouvrir directement la liste des quêtes",
+      "url": "./?vue=quests",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Quotidiennes",
+      "short_name": "Quotidiennes",
+      "description": "Cocher les habitudes du jour",
+      "url": "./?vue=dailies",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "L'Oracle",
+      "short_name": "Oracle",
+      "description": "Poser une question à l'Oracle",
+      "url": "./?vue=oracle",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Outils",
+      "short_name": "Outils",
+      "description": "Chronomètre, Pomodoro, respiration",
+      "url": "./?vue=tools",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

@@ -1,0 +1,55 @@
+# Publie la PWA sur GitHub Pages à chaque poussée sur main.
+#
+# Pourquoi c'est nécessaire : une PWA ne s'installe qu'en HTTPS. Ouvrir le
+# fichier local ou passer par le réseau local ne suffit pas — Safari refusera
+# « Ajouter au Dock », et le service worker ne s'enregistrera pas.
+# GitHub Pages fournit ce HTTPS gratuitement, ce qui reste dans la contrainte
+# de budget nul du projet.
+name: Publier la PWA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Une seule publication à la fois ; on ne coupe pas celle en cours.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Les icônes et les écrans de lancement sont générés, pas versionnés
+      # dans leur forme finale : on les régénère avant de construire.
+      - run: npm run gen:icon
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

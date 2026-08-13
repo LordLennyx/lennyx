@@ -45,6 +45,24 @@ body::before {
 
 button, input, textarea, select { font-family: inherit; color: inherit; }
 
+/* ── Installée en application (Dock macOS, écran d'accueil iOS) ────────────
+   Une application ne rebondit pas quand on la fait défiler jusqu'au bout, et
+   on n'y sélectionne pas par mégarde le libellé d'un bouton. Ces réglages ne
+   s'appliquent QUE hors navigateur : dans un onglet, on garde le
+   comportement web que l'utilisateur attend. */
+@media (display-mode: standalone), (display-mode: minimal-ui) {
+  html, body {
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Le châssis n'est pas du texte : ni sélection, ni curseur en I dessus.
+     Les contenus (notes, réponses de l'Oracle, champs) restent copiables. */
+  .sidebar, .topbar, .nav-btn, .btn, .chip, .badge, .tab, .stat-tile .label {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb {
   background: linear-gradient(var(--border), color-mix(in srgb, var(--accent) 25%, var(--border)));

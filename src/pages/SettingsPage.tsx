@@ -10,6 +10,7 @@ import { GEMINI_MODELS, GROQ_MODELS, defaultModelFor } from '../lib/llmOracle';
 import { encryptText, decryptText, isEncryptedPayload } from '../lib/crypto';
 import CloudSyncSection from '../components/CloudSyncSection';
 import BackgroundPresence from '../components/BackgroundPresence';
+import InstallSection from '../components/InstallSection';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -390,6 +391,8 @@ export default function SettingsPage() {
         )}
       </div>
 
+      <InstallSection />
+
       <SyncSection />
 
       <BackgroundPresence />
@@ -493,7 +496,7 @@ export default function SettingsPage() {
       </div>
 
       <p className="muted" style={{ marginTop: 20, textAlign: 'center', letterSpacing: '0.15em', fontSize: 11 }}>
-        LENNYX v0.8.1 — ORDRE &amp; GLOIRE
+        LENNYX v0.8.2 — ORDRE &amp; GLOIRE
       </p>
     </div>
   );

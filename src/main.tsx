@@ -24,8 +24,33 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 // Electron (file://) ni dans la WebView Capacitor (le natif s'en charge).
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {
-      /* le SW est un bonus */
-    });
+    // La version voyage dans l'URL : le navigateur voit un worker différent à
+    // chaque publication et le réinstalle, au lieu de garder l'ancien.
+    void navigator.serviceWorker
+      .register(`./sw.js?v=${__APP_VERSION__}`)
+      .then((reg) => {
+        // Safari ne cherche une nouvelle version qu'au lancement. Une
+        // vérification horaire évite qu'une application installée depuis des
+        // semaines reste bloquée sur du vieux code.
+        setInterval(() => void reg.update(), 60 * 60_000);
+
+        // Une version est prête mais attend que l'ancienne libère la place :
+        // on prévient l'application, qui proposera de recharger.
+        const watch = (worker: ServiceWorker | null) => {
+          if (!worker) return;
+          worker.addEventListener('statechange', () => {
+            if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+              window.dispatchEvent(new CustomEvent('lennyx-update-ready'));
+            }
+          });
+        };
+        if (reg.waiting && navigator.serviceWorker.controller) {
+          window.dispatchEvent(new CustomEvent('lennyx-update-ready'));
+        }
+        reg.addEventListener('updatefound', () => watch(reg.installing));
+      })
+      .catch(() => {
+        /* le SW est un bonus */
+      });
   });
 }

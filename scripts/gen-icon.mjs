@@ -1,7 +1,7 @@
 // Génère build/icon.png (512×512) depuis le monogramme Lennyx.
 // electron-builder l'utilise automatiquement pour l'exe et l'installateur.
 import sharp from 'sharp';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 const svg = `<svg width="512" height="512" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -45,6 +45,91 @@ await sharp({ create: { width: 512, height: 512, channels: 4, background: '#0a0a
   .composite([{ input: inner, left: 56, top: 56 }])
   .png()
   .toFile('public/icons/maskable-512.png');
+
+// Favicon vectoriel : net à toutes les tailles, dans l'onglet comme dans la
+// barre des favoris, et issu de la même source que toutes les autres icônes.
+writeFileSync('public/icons/monogram.svg', svg);
+
+// ── Apple : icône de Dock / d'écran d'accueil ──
+// iOS et macOS applique leur propre masque arrondi : on fournit un carré PLEIN.
+// Surtout, l'image ne doit pas avoir de canal alpha — iOS compose du noir
+// derrière la transparence et l'icône ressort sale.
+await sharp(Buffer.from(svg))
+  .resize(180, 180)
+  .flatten({ background: '#0a0a0d' })
+  .png()
+  .toFile('public/icons/apple-touch-icon.png');
+
+// ── Écrans de lancement iOS ──
+// Sans eux, ouvrir la PWA depuis l'écran d'accueil affiche un flash blanc :
+// c'est le détail qui trahit une page web déguisée en application.
+// (macOS n'utilise pas ces images ; iOS les exige par résolution exacte.)
+const APPLE_SCREENS = [
+  // [largeur CSS, hauteur CSS, densité, description]
+  [320, 568, 2, 'iPhone SE 1'],
+  [375, 667, 2, 'iPhone SE 2/3, 8'],
+  [414, 736, 3, 'iPhone 8 Plus'],
+  [375, 812, 3, 'iPhone X/XS/11 Pro/12 mini'],
+  [414, 896, 2, 'iPhone XR/11'],
+  [414, 896, 3, 'iPhone XS Max/11 Pro Max'],
+  [390, 844, 3, 'iPhone 12/13/14'],
+  [428, 926, 3, 'iPhone 12/13 Pro Max, 14 Plus'],
+  [393, 852, 3, 'iPhone 14/15/16 Pro'],
+  [430, 932, 3, 'iPhone 14/15 Pro Max'],
+  [402, 874, 3, 'iPhone 16 Pro'],
+  [440, 956, 3, 'iPhone 16 Pro Max'],
+  [768, 1024, 2, 'iPad'],
+  [810, 1080, 2, 'iPad 10.2"'],
+  [820, 1180, 2, 'iPad Air'],
+  [834, 1194, 2, 'iPad Pro 11"'],
+  [1024, 1366, 2, 'iPad Pro 12.9"'],
+];
+
+mkdirSync('public/splash', { recursive: true });
+
+/** Un écran de lancement : fond obsidienne, monogramme centré, rien d'autre. */
+async function splash(w, h, file) {
+  const logoSize = Math.round(Math.min(w, h) * 0.28);
+  const logo = await sharp(Buffer.from(svg)).resize(logoSize, logoSize).png().toBuffer();
+  await sharp({ create: { width: w, height: h, channels: 3, background: '#0a0a0d' } })
+    .composite([{ input: logo, left: Math.round((w - logoSize) / 2), top: Math.round((h - logoSize) / 2) }])
+    // Ces images sont un aplat + un petit monogramme : une palette indexée
+    // les divise par dix sans différence visible, et vingt-deux écrans de
+    // lancement n'ont pas à peser plus lourd que l'application elle-même.
+    .png({ compressionLevel: 9, palette: true, effort: 10 })
+    .toFile(`public/splash/${file}`);
+}
+
+const appleLinks = [];
+for (const [cw, ch, dpr, label] of APPLE_SCREENS) {
+  const isTablet = cw >= 768;
+  const orientations = isTablet ? ['portrait', 'landscape'] : ['portrait'];
+  for (const orientation of orientations) {
+    const [w, h] = orientation === 'portrait' ? [cw * dpr, ch * dpr] : [ch * dpr, cw * dpr];
+    const file = `splash-${cw}x${ch}@${dpr}-${orientation}.png`;
+    await splash(w, h, file);
+    appleLinks.push(
+      `    <link rel="apple-touch-startup-image" href="./splash/${file}"\n` +
+      `      media="(device-width: ${cw}px) and (device-height: ${ch}px) and (-webkit-device-pixel-ratio: ${dpr}) and (orientation: ${orientation})" />` +
+      `<!-- ${label} -->`,
+    );
+  }
+}
+
+// Les balises sont réécrites dans index.html entre deux marqueurs : la liste
+// des appareils vit à un seul endroit, ici.
+const INDEX = 'index.html';
+const START = '<!-- apple-splash:start -->';
+const END = '<!-- apple-splash:end -->';
+let html = readFileSync(INDEX, 'utf8');
+const a = html.indexOf(START);
+const b = html.indexOf(END);
+if (a !== -1 && b !== -1) {
+  html = html.slice(0, a + START.length) + '\n' + appleLinks.join('\n') + '\n    ' + html.slice(b);
+  writeFileSync(INDEX, html);
+} else {
+  console.warn('⚠ marqueurs apple-splash absents d’index.html : balises non injectées');
+}
 
 // ── mipmaps Android : le même « L » majestueux sur le téléphone ──
 const DENSITIES = [

@@ -309,9 +309,60 @@ possible sans rien payer : `npm run ios:sync`, ouvrir `ios/App/App.xcworkspace`,
 équipe personnelle et lancer. L'application **expire au bout de 7 jours** et doit être réinstallée
 — c'est la limite du compte gratuit, pas celle de Lennyx.
 
-**Sans Mac, l'alternative qui coûte zéro et marche aujourd'hui** : la PWA. Safari → Partager →
-« Sur l'écran d'accueil ». Icône, plein écran, fonctionnement hors ligne. Le podomètre et le
-réveil plein écran n'y sont pas (Safari n'y donne pas accès), mais tout le reste l'est.
+**Sans Mac, l'alternative qui coûte zéro et marche aujourd'hui** : la PWA, décrite ci-dessous.
+
+## 💻 La PWA — Lennyx en application sur Mac et iPhone
+
+Pas d'App Store, pas de compte développeur, pas un centime : une adresse en HTTPS suffit, et
+Lennyx s'installe comme une application native.
+
+### L'installer
+
+| Plateforme | Marche à suivre |
+|---|---|
+| **macOS (Safari 17+)** | Menu **Fichier → « Ajouter au Dock… »** |
+| **macOS (Chrome/Edge)** | Icône d'installation dans la barre d'adresse |
+| **iPhone / iPad** | **Safari** → Partager → « Sur l'écran d'accueil » |
+
+Sur Mac, Lennyx devient une vraie application : sa fenêtre, son icône dans le Dock, sa place
+dans Cmd+Tab. **Cmd + 1 à 9** passent d'une section à l'autre, et un clic droit sur l'icône du
+Dock ouvre directement les Quêtes, les Quotidiennes, l'Oracle ou les Outils.
+
+### Ce qui a été fait pour que ce soit une vraie application
+
+- **22 écrans de lancement iOS**, un par résolution d'appareil, générés au build. Sans eux,
+  ouvrir la PWA affiche un flash blanc — le détail qui trahit une page web déguisée.
+- **Icône Apple 180×180 opaque** (iOS compose du noir derrière la transparence et salit l'icône),
+  favicon vectoriel, icône maskable pour Android.
+- **Service worker repensé.** L'ancien était en « cache d'abord » pour tout, y compris la page :
+  une fois installé, il pouvait resservir indéfiniment un vieux bundle. Trois stratégies
+  maintenant, chacune adaptée à ce qu'elle sert : **réseau d'abord** pour la page (donc jamais de
+  code périmé, avec repli sur le cache hors ligne), **cache d'abord** pour les fichiers au nom
+  versionné (immuables par construction), et cache rafraîchi en arrière-plan pour le reste.
+- **Plus de version à maintenir à la main** : le worker s'enregistre sous `./sw.js?v=<version>`,
+  lue depuis `package.json` à la compilation. L'URL change à chaque publication, donc le
+  navigateur réinstalle, et les caches — nommés d'après elle — sont balayés. Un oubli de
+  numérotation aurait laissé les utilisateurs installés bloqués sur du vieux code.
+- **Bandeau « une nouvelle version est prête »** avec rechargement au moment choisi, jamais imposé.
+- **Réglages du mode installé** : plus de rebond élastique en fin de défilement, plus de
+  sélection accidentelle sur les boutons — appliqués *uniquement* hors navigateur.
+
+Vérifié serveur éteint : l'application démarre, navigue dans toutes ses sections, polices
+comprises, sans une erreur.
+
+### Ce que la PWA ne fera pas
+
+Il faut le savoir avant de compter dessus : **le podomètre ne compte que l'application ouverte**
+(Safari ne donne pas accès au capteur de pas) et **le réveil ne sonne que si Lennyx est ouvert**
+— aucun navigateur ne peut prendre l'écran verrouillé. Ces deux fonctions restent l'apanage des
+versions Windows et Android. Tout le reste — quêtes, XP, Oracle, notes, finances, boutique,
+succès, chronomètre, Pomodoro — est identique, et l'écran Réglages le dit noir sur blanc.
+
+### La publier
+
+Le workflow `.github/workflows/pages.yml` publie `dist/` sur GitHub Pages à chaque poussée sur
+`main` — l'HTTPS gratuit sans lequel aucune PWA ne s'installe. À activer une fois dans
+**Settings → Pages → Source : GitHub Actions**.
 
 ## 🛠️ Stack
 
