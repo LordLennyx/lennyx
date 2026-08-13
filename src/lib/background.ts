@@ -28,6 +28,8 @@ interface LennyxBackgroundPlugin {
   status(): Promise<BackgroundStatus>;
   requestBatteryExemption(): Promise<{ granted: boolean }>;
   getSteps(): Promise<{ days: Record<string, number> }>;
+  catchUp(): Promise<{ caughtUp: boolean; stepsToday?: number; added?: number; timedOut?: boolean }>;
+  journal(): Promise<{ log: string }>;
 }
 
 const Background = registerPlugin<LennyxBackgroundPlugin>('LennyxBackground');
@@ -95,6 +97,36 @@ export function sensorLabel(s: StepSensor): string {
     case 'detector': return 'détecteur de pas matériel';
     case 'accel': return 'accéléromètre (repli)';
     default: return 'aucun';
+  }
+}
+
+/**
+ * Rattrape les pas faits application fermée, en relisant le compteur MATÉRIEL.
+ *
+ * À appeler à chaque retour dans l'application, avant `nativeSteps()`. C'est ce
+ * qui rend le comptage indépendant de la survie du service : le compteur du
+ * téléphone accumule tout seul depuis le dernier démarrage, donc même si
+ * Android a tué le service — ce que font volontiers les surcouches
+ * constructeur — rien n'est perdu, il suffit de relire.
+ */
+export async function catchUpSteps(): Promise<number> {
+  if (!backgroundSupported()) return 0;
+  try {
+    const res = await Background.catchUp();
+    return res.added ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Journal du service : des faits datés plutôt que des suppositions. */
+export async function stepJournal(): Promise<string> {
+  if (!backgroundSupported()) return '';
+  try {
+    const { log } = await Background.journal();
+    return log ?? '';
+  } catch {
+    return '';
   }
 }
 

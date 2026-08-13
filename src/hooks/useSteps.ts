@@ -22,7 +22,8 @@ import { useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Motion } from '@capacitor/motion';
 import { useStore } from '../store/useStore';
-import { backgroundSupported, nativeSteps } from '../lib/background';
+import { backgroundSupported, nativeSteps, catchUpSteps } from '../lib/background';
+import { pedometerIOSSupported, iosSteps } from '../lib/pedometerIOS';
 
 const PEAK_THRESHOLD = 1.4; // m/s² au-dessus de la gravité lissée
 const MIN_STEP_MS = 280; // cadence max ~3.5 pas/s
@@ -39,20 +40,50 @@ export function useSteps() {
   const lastStep = useRef(0);
   const above = useRef(false);
 
-  // ── Source 1 : le service natif (rapatriement des compteurs) ────────────
+  // ── Source 1 bis : iOS, qui tient l'historique tout seul ────────────────
+  // Pas de service à maintenir en vie ici : le système enregistre les pas en
+  // continu et les restitue sur sept jours. On interroge, on range, c'est tout.
   useEffect(() => {
-    if (!backgroundSupported()) return;
+    if (!pedometerIOSSupported()) return;
     let alive = true;
     const sync = async () => {
-      const days = await nativeSteps();
+      const days = await iosSteps();
       if (alive && Object.keys(days).length > 0) setNativeSteps(days);
     };
     void sync();
     const iv = setInterval(sync, NATIVE_POLL_MS);
-    // au retour dans l'application, on rapatrie tout de suite ce qui a été
-    // marché pendant qu'elle était fermée
     const onVisible = () => {
       if (document.visibilityState === 'visible') void sync();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      clearInterval(iv);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [setNativeSteps]);
+
+  // ── Source 1 : le service natif (rapatriement des compteurs) ────────────
+  useEffect(() => {
+    if (!backgroundSupported()) return;
+    let alive = true;
+    /**
+     * @param deep relire d'abord le compteur MATÉRIEL. C'est lui qui détient
+     *   les pas faits pendant l'absence, que le service ait survécu ou non ;
+     *   sans cette relecture, tout reposait sur un service qu'Android peut
+     *   tuer à sa guise — et c'est exactement ce qui se passait.
+     */
+    const sync = async (deep = false) => {
+      if (deep) await catchUpSteps();
+      const days = await nativeSteps();
+      if (alive && Object.keys(days).length > 0) setNativeSteps(days);
+    };
+    void sync(true);
+    const iv = setInterval(() => void sync(), NATIVE_POLL_MS);
+    // au retour dans l'application, on rapatrie tout ce qui a été marché
+    // pendant qu'elle était fermée
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void sync(true);
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {

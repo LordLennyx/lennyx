@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.net.Uri;
 import android.os.Build;
@@ -174,6 +176,87 @@ public class LennyxBackgroundPlugin extends Plugin {
             } catch (Exception ignored) { }
         }
         ret.put("granted", false);
+        call.resolve(ret);
+    }
+
+    /**
+     * Rattrape les pas faits pendant que l'application était fermée, SANS
+     * dépendre du service.
+     *
+     * C'est la pièce qui manquait. Le compteur matériel accumule tout seul,
+     * depuis le dernier démarrage du téléphone : même si Android a tué notre
+     * service — ce que font volontiers les surcouches constructeur — il suffit
+     * de relire ce compteur à la réouverture et de le comparer à notre valeur
+     * de référence pour retrouver, intacts, tous les pas manqués.
+     *
+     * Autrement dit : la justesse du comptage ne repose plus sur la survie
+     * d'un processus, mais sur un compteur que rien ne peut remettre à zéro
+     * hormis un redémarrage — cas que `applyCumulative` sait déjà traiter.
+     */
+    @PluginMethod
+    public void catchUp(final PluginCall call) {
+        SensorManager sm = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
+        Sensor counter = sm == null ? null : sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+        if (counter == null) {
+            // Pas de compteur cumulatif : rien à rattraper, seul le service
+            // (détecteur ou accéléromètre) peut compter, et il l'a déjà fait.
+            JSObject ret = new JSObject();
+            ret.put("caughtUp", false);
+            call.resolve(ret);
+            return;
+        }
+
+        final SensorManager manager = sm;
+        final boolean[] done = { false };
+        final SensorEventListener listener = new SensorEventListener() {
+            @Override
+            public void onSensorChanged(SensorEvent event) {
+                synchronized (done) {
+                    if (done[0]) return;
+                    done[0] = true;
+                }
+                manager.unregisterListener(this);
+                long total = (long) event.values[0];
+                int stepsToday = LennyxStepStore.applyCumulative(getContext(), total);
+                int added = LennyxStepStore.publish(getContext(), stepsToday);
+                if (added > 0) {
+                    LennyxStepStore.log(getContext(), "rattrapage +" + added + " (total " + stepsToday + ")");
+                }
+                JSObject ret = new JSObject();
+                ret.put("caughtUp", true);
+                ret.put("stepsToday", stepsToday);
+                ret.put("added", added);
+                call.resolve(ret);
+            }
+
+            @Override
+            public void onAccuracyChanged(Sensor sensor, int accuracy) { }
+        };
+
+        // SENSOR_DELAY_FASTEST : on veut la valeur courante tout de suite, pas
+        // un flux. Le premier évènement suffit, on se désabonne aussitôt.
+        manager.registerListener(listener, counter, SensorManager.SENSOR_DELAY_FASTEST);
+
+        // Filet : certains capteurs ne livrent leur premier relevé qu'au pas
+        // suivant. On ne laisse pas l'appel pendre indéfiniment.
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            synchronized (done) {
+                if (done[0]) return;
+                done[0] = true;
+            }
+            try { manager.unregisterListener(listener); } catch (Exception ignored) { }
+            JSObject ret = new JSObject();
+            ret.put("caughtUp", false);
+            ret.put("timedOut", true);
+            call.resolve(ret);
+        }, 4000);
+    }
+
+    /** Journal du service, affiché dans le diagnostic. */
+    @PluginMethod
+    public void journal(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("log", LennyxStepStore.readLog(getContext()));
         call.resolve(ret);
     }
 

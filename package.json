@@ -1,7 +1,7 @@
 {
   "name": "lennyx",
   "productName": "Lennyx",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Lennyx — la to-do list gamifiée. Transforme tes tâches en quêtes épiques.",
   "author": "Lens Daniels <lensdaniels237@gmail.com>",
   "private": true,
@@ -14,7 +14,8 @@
     "gen:sounds": "node scripts/gen-sounds.mjs",
     "electron:dev": "npm run build && electron .",
     "electron:build": "npm run build && npm run gen:icon && electron-builder --win",
-    "android:sync": "npm run build && npx cap sync android"
+    "android:sync": "npm run build && npx cap sync android",
+    "ios:sync": "npm run build && npx cap sync ios"
   },
   "dependencies": {
     "@capacitor-community/text-to-speech": "^6.1.0",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@capacitor/android": "^7.0.0",
     "@capacitor/cli": "^7.0.0",
+    "@capacitor/ios": "^7.6.8",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

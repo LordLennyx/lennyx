@@ -40,7 +40,8 @@ import java.util.Locale;
  */
 public class LennyxStepService extends Service implements SensorEventListener {
 
-    public static final String PREFS = "LennyxBackground";
+    /** Même espace de préférences que LennyxStepStore : une seule source. */
+    public static final String PREFS = LennyxStepStore.PREFS;
     public static final String CHANNEL_ID = "lennyx-presence";
     public static final String KEY_ENABLED = "backgroundEnabled";
     /** Capteur réellement utilisé, exposé au diagnostic : counter|detector|accel|none */
@@ -114,6 +115,8 @@ public class LennyxStepService extends Service implements SensorEventListener {
         }
 
         prefs.edit().putString(KEY_SENSOR, mode).apply();
+        LennyxStepStore.log(this, "service démarré, capteur=" + mode
+            + (s == null ? "" : " (" + s.getName() + ")"));
         if (s == null) return;
 
         // Le compteur matériel accumule tout seul : inutile de réveiller le CPU
@@ -159,6 +162,9 @@ public class LennyxStepService extends Service implements SensorEventListener {
 
     @Override
     public void onDestroy() {
+        // La trace la plus précieuse du journal : si le service meurt cinq
+        // minutes après chaque extinction d'écran, c'est le système qui le tue.
+        LennyxStepStore.log(this, "service arrêté par le système");
         if (sensorManager != null) sensorManager.unregisterListener(this);
         if (wakeLock != null && wakeLock.isHeld()) {
             try { wakeLock.release(); } catch (Exception ignored) { }
@@ -202,36 +208,14 @@ public class LennyxStepService extends Service implements SensorEventListener {
 
     /** Compteur matériel : un cumul depuis le dernier démarrage du téléphone. */
     private void onCumulativeCounter(long total) {
-        String day = today();
-        String baselineDay = prefs.getString("baselineDay", "");
-        long baseline = prefs.getLong("baseline", -1);
-        // « Acquis » du jour : ce qui a déjà été compté aujourd'hui avant que ce
-        // service ne prenne la main — pas relevés par l'accéléromètre et transmis
-        // au démarrage, ou pas déjà enregistrés par le service avant un reboot.
-        // Sans lui, le compteur repartirait de zéro et resterait figé le temps de
-        // rattraper l'existant (symptôme « le podomètre ne compte plus »).
-        int offset = prefs.getInt("offset-" + day, 0);
-
-        // Un seul recalage, trois causes possibles : premier démarrage, nouveau
-        // jour, ou redémarrage du téléphone (le compteur matériel repart à zéro).
-        // Les clés étant datées, un nouveau jour a naturellement un acquis nul.
-        if (!day.equals(baselineDay) || baseline < 0 || total < baseline) {
-            offset = Math.max(offset, prefs.getInt("steps-" + day, 0));
-            baseline = total;
-            prefs.edit()
-                .putString("baselineDay", day)
-                .putLong("baseline", baseline)
-                .putInt("offset-" + day, offset)
-                .apply();
-        }
-
-        publish(day, offset + (int) Math.max(0, total - baseline));
+        // Logique partagée avec le plugin (LennyxStepStore) : deux copies du
+        // recalage finiraient tôt ou tard par diverger.
+        publish(LennyxStepStore.applyCumulative(this, total));
     }
 
     /** Détecteur matériel ou logiciel : on incrémente ce qu'on a déjà. */
     private void addSteps(int n) {
-        String day = today();
-        publish(day, prefs.getInt("steps-" + day, 0) + n);
+        publish(prefs.getInt("steps-" + today(), 0) + n);
     }
 
     private void onAccelerometer(float x, float y, float z, long now) {
@@ -250,20 +234,8 @@ public class LennyxStepService extends Service implements SensorEventListener {
     }
 
     /** Écrit le total du jour, rafraîchit le widget et la notification. */
-    private void publish(String day, int stepsToday) {
-        int previous = prefs.getInt("steps-" + day, 0);
-        if (stepsToday <= previous) return; // rien de neuf, on évite d'écrire
-
-        prefs.edit()
-            .putInt("steps-" + day, stepsToday)
-            .putLong("lastUpdate", System.currentTimeMillis())
-            .apply();
-
-        // Le widget reflète les pas en direct, même application fermée.
-        SharedPreferences widgetPrefs =
-            getSharedPreferences(LennyxWidgetProvider.PREFS_NAME, Context.MODE_PRIVATE);
-        widgetPrefs.edit().putInt("stepsToday", stepsToday).apply();
-        LennyxWidgetProvider.updateAll(this);
+    private void publish(int stepsToday) {
+        if (LennyxStepStore.publish(this, stepsToday) <= 0) return; // rien de neuf
 
         // La notification permanente affiche le compteur : figée à « 0 pas »,
         // elle donnerait l'impression que le service ne fait rien.

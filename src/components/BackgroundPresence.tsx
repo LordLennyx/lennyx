@@ -8,8 +8,10 @@ import { todayStr } from '../game/engine';
 import { Icon } from './Icon';
 import {
   backgroundSupported, startBackground, stopBackground, backgroundStatus,
-  requestBatteryExemption, sensorLabel, type BackgroundStatus,
+  requestBatteryExemption, sensorLabel, stepJournal, catchUpSteps,
+  type BackgroundStatus,
 } from '../lib/background';
+import { pedometerIOSSupported, iosPedometerStatus, type MotionAuth } from '../lib/pedometerIOS';
 
 export default function BackgroundPresence({ compact = false }: { compact?: boolean }) {
   const background = useStore((s) => s.profile.background);
@@ -17,6 +19,13 @@ export default function BackgroundPresence({ compact = false }: { compact?: bool
   const pushToast = useStore((s) => s.pushToast);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<BackgroundStatus | null>(null);
+  const [journal, setJournal] = useState<string | null>(null);
+  const [ios, setIos] = useState<{ available: boolean; authorization: MotionAuth } | null>(null);
+
+  useEffect(() => {
+    if (!pedometerIOSSupported()) return;
+    void iosPedometerStatus().then(setIos);
+  }, []);
 
   const supported = backgroundSupported();
 
@@ -64,6 +73,27 @@ export default function BackgroundPresence({ compact = false }: { compact?: bool
     }
   };
 
+  // Sur iPhone, il n'y a rien à activer : le système enregistre les pas de son
+  // côté et Lennyx lit son historique. Pas de service, pas de notification
+  // permanente, pas d'exemption de batterie à quémander.
+  if (pedometerIOSSupported()) {
+    if (compact) return null;
+    return (
+      <div className="card">
+        <h3 style={{ marginBottom: 8, fontFamily: 'var(--font-display)', letterSpacing: '0.06em', fontSize: 15 }}>
+          Comptage permanent
+        </h3>
+        <p className="muted">
+          Rien à activer : ton iPhone compte tes pas en permanence, de lui-même, et Lennyx relit
+          son historique à chaque ouverture — y compris ce que tu as marché application fermée.
+          {ios && !ios.available && ' Cet appareil ne dispose pas du capteur nécessaire.'}
+          {ios?.authorization === 'denied'
+            && ' L’accès au mouvement est refusé : autorise-le dans Réglages → Confidentialité → Mouvement et forme.'}
+        </p>
+      </div>
+    );
+  }
+
   if (!supported) {
     if (compact) return null;
     return (
@@ -94,6 +124,33 @@ export default function BackgroundPresence({ compact = false }: { compact?: bool
     await requestBatteryExemption();
     // Le réglage se fait dans un écran système : on relit à son retour.
     setTimeout(() => void refresh(), 1200);
+  };
+
+  const showJournal = async () => {
+    if (journal !== null) {
+      setJournal(null);
+      return;
+    }
+    setJournal((await stepJournal()) || '(rien d’enregistré pour l’instant)');
+  };
+
+  /** Force une relecture du compteur matériel, résultat annoncé sans détour. */
+  const forceCatchUp = async () => {
+    setBusy(true);
+    try {
+      const added = await catchUpSteps();
+      pushToast(
+        added > 0 ? 'check' : 'info',
+        added > 0
+          ? `${added} pas récupérés depuis le compteur du téléphone`
+          : 'Compteur relu — rien de nouveau depuis la dernière lecture',
+        'info',
+      );
+      await refresh();
+      if (journal !== null) setJournal((await stepJournal()) || '(vide)');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -200,6 +257,29 @@ export default function BackgroundPresence({ compact = false }: { compact?: bool
         <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
           Cet appareil n'expose aucun capteur de mouvement : le comptage se fera à la main.
         </p>
+      )}
+
+      {/* Relecture manuelle + journal : de quoi constater par soi-même plutôt
+          que de croire sur parole. */}
+      <div className="row" style={{ marginTop: 12 }}>
+        <button className="btn small" onClick={() => void forceCatchUp()} disabled={busy}>
+          <Icon name="upload" size={13} /> Relire le compteur du téléphone
+        </button>
+        <button className="btn small" onClick={() => void showJournal()}>
+          <Icon name="list" size={13} /> {journal === null ? 'Voir le journal' : 'Masquer le journal'}
+        </button>
+      </div>
+      {journal !== null && (
+        <pre
+          style={{
+            marginTop: 10, padding: 10, maxHeight: 220, overflow: 'auto',
+            background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border)',
+            borderRadius: 10, fontSize: 11, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+            color: 'var(--muted)',
+          }}
+        >
+          {journal}
+        </pre>
       )}
       {permissionMissing && !noSensor && (
         <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>

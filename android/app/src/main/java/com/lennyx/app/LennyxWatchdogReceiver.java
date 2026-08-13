@@ -88,8 +88,10 @@ public class LennyxWatchdogReceiver extends BroadcastReceiver {
             } else {
                 ctx.startService(svc);
             }
-        } catch (Exception ignored) {
-            // service déjà lancé, ou démarrage refusé : la prochaine passe réessaiera
+        } catch (Exception e) {
+            // Démarrage refusé (Android 12+ restreint le lancement d'un service
+            // de premier plan depuis l'arrière-plan) : la trace le dira.
+            LennyxStepStore.log(ctx, "chien de garde refusé : " + e.getClass().getSimpleName());
         }
 
         // Une alarme exacte ne se répète pas d'elle-même : on rearme la suivante.

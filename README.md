@@ -263,6 +263,56 @@ toutes deux traitées :
 - Le diagnostic dit maintenant **quel capteur sert réellement** et **quand le service a donné
   signe de vie** — de quoi distinguer « service mort » de « tu n'as pas marché ».
 
+### v0.8.1 — le podomètre ne dépend plus de la survie du service
+
+Le comptage hors application ne marchait toujours pas. J'avais mal posé le problème : je
+cherchais à **garder le service en vie**, alors que ce n'était pas nécessaire.
+
+`TYPE_STEP_COUNTER` accumule **dans le matériel**, depuis le dernier démarrage du téléphone. Il
+continue donc de compter quand Android tue le service, le processus, ou les deux. Il suffisait de
+**relire ce compteur à chaque réouverture** et de le comparer à notre valeur de référence pour
+retrouver, intacts, tous les pas faits pendant l'absence.
+
+- `catchUp()` fait exactement ça, au lancement et à chaque retour dans l'application. La justesse
+  du comptage ne repose plus sur un processus qu'Android peut tuer à sa guise. Le service reste
+  utile — il rafraîchit le widget en direct — mais il n'est plus indispensable.
+- **Correctif du redémarrage**, trouvé en écrivant le test : après un reboot, les pas faits entre
+  le démarrage du téléphone et la première lecture étaient perdus. Le compteur repart de zéro à
+  l'instant du boot, donc tout ce qu'il affiche a bien été marché depuis — et doit être crédité.
+- **Journal de bord natif** dans le diagnostic (Outils → Pas) : chaque événement daté — service
+  démarré et avec quel capteur, recalages, rattrapages, arrêts par le système, refus du chien de
+  garde. Après deux corrections à l'aveugle, il fallait pouvoir constater plutôt que supposer.
+- Un bouton **« Relire le compteur du téléphone »** force la relecture et annonce combien de pas
+  ont été récupérés.
+
+## 🍎 iOS
+
+Le projet iOS existe (`ios/`, Capacitor) et le **podomètre y est plus simple qu'ailleurs** :
+`CMPedometer` conserve l'historique des pas sur sept jours, enregistré en continu par le
+coprocesseur de mouvement. Lennyx n'a donc **rien à faire tourner en arrière-plan** — il
+interroge l'historique à l'ouverture et récupère tout ce qui a été marché entre deux lancements,
+sans service, sans notification permanente et sans coût en batterie.
+
+`LennyxPedometerPlugin.swift` implémente ça et est déjà référencé dans le projet Xcode.
+
+**Ce qui manque pour tenir un `.ipa` entre les mains**, en toute franchise :
+
+| Étape | État |
+|---|---|
+| Projet Xcode, plugin podomètre, permissions | ✅ fait |
+| Compilation | ❌ **exige un Mac** — Xcode n'existe pas sous Windows |
+| Installation sur un iPhone | ⚠️ signature obligatoire |
+| Publication sur l'App Store | 💸 99 $/an |
+
+Avec un Mac et un **identifiant Apple gratuit**, l'installation sur son propre iPhone est
+possible sans rien payer : `npm run ios:sync`, ouvrir `ios/App/App.xcworkspace`, choisir son
+équipe personnelle et lancer. L'application **expire au bout de 7 jours** et doit être réinstallée
+— c'est la limite du compte gratuit, pas celle de Lennyx.
+
+**Sans Mac, l'alternative qui coûte zéro et marche aujourd'hui** : la PWA. Safari → Partager →
+« Sur l'écran d'accueil ». Icône, plein écran, fonctionnement hors ligne. Le podomètre et le
+réveil plein écran n'y sont pas (Safari n'y donne pas accès), mais tout le reste l'est.
+
 ## 🛠️ Stack
 
 | Couche | Techno |
