@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore, stepsOn } from '../store/useStore';
 import { addDays, todayStr, WEEKDAYS, isScheduledOn } from '../game/engine';
-import { MELODIES, playMelody, stopMelody, CUSTOM_AUDIO_KEY } from '../lib/melodies';
+import { MELODIES, playMelody, stopMelody } from '../lib/melodies';
 import { Icon } from '../components/Icon';
 import { speak, stopSpeaking } from '../lib/voice';
 import ShareCardButton from '../components/ShareCardButton';
 import { levelFromXp } from '../game/xp';
-import { notifyNow } from '../lib/notify';
 import BackgroundPresence from '../components/BackgroundPresence';
+import AlarmStudio from '../components/AlarmStudio';
+import { showCountUp, showCountDown, hideTimer, TIMER_ID } from '../lib/timerBridge';
 
 type Tab = 'chrono' | 'pomodoro' | 'alarms' | 'steps' | 'breathing';
 
@@ -23,30 +24,50 @@ function fmtDur(s: number): string {
 }
 
 function ChronoTab() {
-  const { timeLog, logTime, deleteTimeLog, dailies, profile } = useStore();
-  const [label, setLabel] = useState('');
-  const [taskId, setTaskId] = useState('');
-  const [running, setRunning] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const startRef = useRef(0);
+  const { timeLog, logTime, deleteTimeLog, dailies, profile, setTimers } = useStore();
+  // L'état vit dans le store, pas dans le composant : un chrono qui repart de
+  // zéro parce qu'on a réduit la fenêtre n'est pas un chrono.
+  const chrono = profile.timers.chrono;
+  const running = chrono.startedAt > 0;
+  const [label, setLabel] = useState(chrono.label);
+  const [taskId, setTaskId] = useState(chrono.taskId);
+  const [elapsed, setElapsed] = useState(running ? (Date.now() - chrono.startedAt) / 1000 : 0);
 
   useEffect(() => {
-    if (!running) return;
-    const iv = setInterval(() => setElapsed((Date.now() - startRef.current) / 1000), 250);
-    return () => clearInterval(iv);
-  }, [running]);
+    if (!running) {
+      setElapsed(0);
+      return;
+    }
+    // Le temps affiché se DÉDUIT de l'horodatage de départ ; il ne s'accumule
+    // jamais tick par tick, sinon tout ce qui se passe fenêtre fermée est perdu.
+    const tick = () => setElapsed((Date.now() - chrono.startedAt) / 1000);
+    tick();
+    const iv = setInterval(tick, 250);
+    const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(iv);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [running, chrono.startedAt]);
 
   const start = () => {
-    startRef.current = Date.now();
-    setElapsed(0);
-    setRunning(true);
+    const startedAt = Date.now();
+    const linked = dailies.find((d) => d.id === taskId);
+    const name = label || linked?.title || 'Session';
+    setTimers({ chrono: { startedAt, label, taskId } });
+    // Le décompte continue dans la barre de notification, animé par Android
+    // lui-même : aucune ligne de Lennyx n'a besoin de tourner.
+    void showCountUp(TIMER_ID.chrono, `Chronomètre — ${name}`, 'Session en cours', startedAt);
   };
 
   const stop = () => {
-    setRunning(false);
-    const secs = (Date.now() - startRef.current) / 1000;
-    const linked = dailies.find((d) => d.id === taskId);
-    logTime(label || linked?.title || 'Session', secs, taskId || undefined);
+    if (!running) return;
+    const secs = (Date.now() - chrono.startedAt) / 1000;
+    const linked = dailies.find((d) => d.id === chrono.taskId);
+    setTimers({ chrono: { startedAt: 0, label: '', taskId: '' } });
+    void hideTimer(TIMER_ID.chrono);
+    logTime(chrono.label || linked?.title || 'Session', secs, chrono.taskId || undefined);
     setElapsed(0);
   };
 
@@ -161,62 +182,69 @@ type PomoPhase = 'idle' | 'work' | 'break' | 'longBreak';
 function PomodoroTab() {
   const settings = useStore((s) => s.profile.pomodoro);
   const setPomodoroSettings = useStore((s) => s.setPomodoroSettings);
-  const logPomodoro = useStore((s) => s.logPomodoro);
-  const soundOn = useStore((s) => s.profile.soundOn);
   const notifyEnabled = useStore((s) => s.profile.notify.enabled);
   const pomodoros = useStore((s) => s.profile.counters.pomodoros);
 
-  const [phase, setPhase] = useState<PomoPhase>('idle');
-  const [remaining, setRemaining] = useState(settings.workMin * 60);
-  const [cycle, setCycle] = useState(0); // sessions de travail complétées dans ce cycle
-  const [running, setRunning] = useState(false);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Comme le chrono, le Pomodoro est décrit par un INSTANT de fin plutôt que
+  // par un compteur qui s'égrène : c'est ce qui lui permet d'être encore juste
+  // après un quart d'heure passé dans une autre application.
+  const pomo = useStore((s) => s.profile.timers.pomodoro);
+  const setTimers = useStore((s) => s.setTimers);
+  const settlePomodoro = useStore((s) => s.settlePomodoro);
 
-  const durationFor = (p: PomoPhase) =>
-    p === 'work' ? settings.workMin * 60 : p === 'longBreak' ? settings.longBreakMin * 60 : settings.breakMin * 60;
+  const phase = pomo.phase;
+  const running = pomo.endsAt > 0;
+  const [now, setNow] = useState(Date.now());
 
-  const stopTick = () => { if (tickRef.current) clearInterval(tickRef.current); tickRef.current = null; };
+  const durationMs = (p: PomoPhase) =>
+    (p === 'work' ? settings.workMin : p === 'longBreak' ? settings.longBreakMin : settings.breakMin) * 60_000;
 
-  const goToPhase = (p: PomoPhase, autoStart: boolean) => {
-    setPhase(p);
-    setRemaining(durationFor(p));
-    setRunning(autoStart);
-  };
+  const remainingMs = running
+    ? Math.max(0, pomo.endsAt - now)
+    : pomo.remainingMs || durationMs(phase === 'idle' ? 'work' : phase);
+  const remaining = remainingMs / 1000;
 
-  const onPhaseEnd = () => {
-    stopTick();
-    if (phase === 'work') {
-      logPomodoro(settings.workMin);
-      const nextCycle = cycle + 1;
-      setCycle(nextCycle);
-      const isLong = nextCycle % settings.longBreakEvery === 0;
-      notifyNow('celebrate', 'Pomodoro terminé', isLong ? 'Pause longue méritée.' : 'Petite pause, puis on repart.', soundOn);
-      goToPhase(isLong ? 'longBreak' : 'break', false);
-    } else {
-      notifyNow('briefing', 'Pause terminée', 'Prêt pour une nouvelle session de travail ?', soundOn);
-      goToPhase('work', false);
-    }
-  };
+  const phaseTitle = (p: PomoPhase) =>
+    p === 'work' ? 'Travail' : p === 'longBreak' ? 'Pause longue' : 'Pause';
 
+  // Le passage d'une phase à l'autre est traité par useTimers, au niveau de
+  // l'application : ici on ne fait qu'afficher le temps restant.
   useEffect(() => {
-    if (!running) return;
-    tickRef.current = setInterval(() => {
-      setRemaining((r) => {
-        if (r <= 1) { onPhaseEnd(); return 0; }
-        return r - 1;
-      });
-    }, 1000);
-    return stopTick;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running]);
+    const iv = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(iv);
+  }, []);
+
+  const cycle = pomo.cycle;
+
+  const launch = (p: PomoPhase, ms: number) => {
+    const endsAt = Date.now() + ms;
+    setTimers({ pomodoro: { phase: p, endsAt, remainingMs: 0, cycle: pomo.cycle } });
+    void showCountDown(
+      TIMER_ID.pomodoro,
+      `Pomodoro — ${phaseTitle(p)}`,
+      'Touche pour revenir dans Lennyx',
+      endsAt,
+      p === 'work' ? 'Pomodoro terminé' : 'Pause terminée',
+      p === 'work' ? 'Va souffler, tu l’as mérité.' : 'On repart pour une session ?',
+    );
+  };
 
   const start = () => {
-    if (phase === 'idle') goToPhase('work', true);
-    else setRunning(true);
+    if (phase === 'idle') launch('work', durationMs('work'));
+    else launch(phase, pomo.remainingMs > 0 ? pomo.remainingMs : durationMs(phase));
   };
-  const pause = () => setRunning(false);
-  const reset = () => { stopTick(); setPhase('idle'); setRunning(false); setCycle(0); setRemaining(settings.workMin * 60); };
-  const skip = () => onPhaseEnd();
+  const pause = () => {
+    void hideTimer(TIMER_ID.pomodoro);
+    setTimers({ pomodoro: { ...pomo, endsAt: 0, remainingMs: Math.max(0, pomo.endsAt - Date.now()) } });
+  };
+  const reset = () => {
+    void hideTimer(TIMER_ID.pomodoro);
+    setTimers({ pomodoro: { phase: 'idle', endsAt: 0, remainingMs: durationMs('work'), cycle: 0 } });
+  };
+  const skip = () => {
+    void hideTimer(TIMER_ID.pomodoro);
+    settlePomodoro(true);
+  };
 
   const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
   const ss = String(Math.floor(remaining % 60)).padStart(2, '0');
@@ -301,14 +329,13 @@ function PomodoroTab() {
 
 function AlarmCard({ kind }: { kind: 'wake' | 'lullaby' }) {
   const alarm = useStore((s) => s.profile.alarms[kind]);
-  const customName = useStore((s) => s.profile.alarms.customAudioName);
   const setAlarm = useStore((s) => s.setAlarm);
-  const setCustomAudioName = useStore((s) => s.setCustomAudioName);
-  const pushToast = useStore((s) => s.pushToast);
-  const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState(false);
   const isWake = kind === 'wake';
   const gallery = MELODIES.filter((m) => m.kind === (isWake ? 'wake' : 'lullaby'));
+  // Un son personnel prend le pas sur les mélodies synthétisées : c'est lui
+  // que le service Android jouera.
+  const usesFile = !!alarm.audio;
 
   const togglePreview = () => {
     if (preview) {
@@ -319,25 +346,6 @@ function AlarmCard({ kind }: { kind: 'wake' | 'lullaby' }) {
       setPreview(true);
       setTimeout(() => { stopMelody(); setPreview(false); }, 8000);
     }
-  };
-
-  const onFile = async (f: File) => {
-    if (f.size > 3_500_000) {
-      pushToast('warning', 'Fichier trop lourd (max ~3,5 Mo) — choisis un extrait plus court', 'warn');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        localStorage.setItem(CUSTOM_AUDIO_KEY, String(reader.result));
-        setCustomAudioName(f.name);
-        setAlarm(kind, { melody: 'custom' });
-        pushToast('check', `« ${f.name} » importé`, 'info');
-      } catch {
-        pushToast('warning', 'Stockage insuffisant pour ce fichier', 'warn');
-      }
-    };
-    reader.readAsDataURL(f);
   };
 
   const toggleDay = (d: number) =>
@@ -371,24 +379,16 @@ function AlarmCard({ kind }: { kind: 'wake' | 'lullaby' }) {
         </div>
       </div>
 
-      <div style={{ marginTop: 12 }}>
-        <span className="muted">Mélodie</span>
+      <div style={{ marginTop: 12, opacity: usesFile ? 0.45 : 1 }}>
+        <span className="muted">
+          Mélodie de secours{usesFile ? ' — ton morceau passe devant' : ''}
+        </span>
         <div className="row" style={{ marginTop: 6 }}>
           {gallery.map((m) => (
             <button key={m.id} className={`chip ${alarm.melody === m.id ? 'on' : ''}`} onClick={() => setAlarm(kind, { melody: m.id })}>
               {m.name}
             </button>
           ))}
-          <button className={`chip ${alarm.melody === 'custom' ? 'on' : ''}`} onClick={() => (customName ? setAlarm(kind, { melody: 'custom' }) : fileRef.current?.click())}>
-            {customName ? `♪ ${customName.slice(0, 18)}` : '+ Mon fichier audio'}
-          </button>
-          {customName && (
-            <button className="btn small" onClick={() => fileRef.current?.click()}>Changer</button>
-          )}
-          <input
-            ref={fileRef} type="file" accept="audio/*" style={{ display: 'none' }}
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ''; }}
-          />
         </div>
       </div>
 
@@ -403,6 +403,8 @@ function AlarmCard({ kind }: { kind: 'wake' | 'lullaby' }) {
           {preview ? 'Stop' : 'Écouter'}
         </button>
       </div>
+
+      <AlarmStudio kind={kind} />
     </div>
   );
 }
@@ -433,8 +435,9 @@ function AlarmsTab() {
           </div>
         )}
         <p className="muted" style={{ marginTop: 10 }}>
-          Sur Android, une notification sonne à l'heure du réveil même app fermée : ouvre-la et la
-          mélodie se lance en plein écran.
+          Sur Android, ton image et ton extrait s'imposent en plein écran à l'heure dite — écran
+          verrouillé, éteint, ou en pleine autre application. Le réveil revient tant que tu n'as
+          pas appuyé sur « Je suis debout ».
         </p>
       </div>
     </>

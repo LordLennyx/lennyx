@@ -7,7 +7,10 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
+import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
+import android.provider.Settings;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -99,25 +102,78 @@ public class LennyxBackgroundPlugin extends Plugin {
     public void stop(PluginCall call) {
         Context ctx = getContext();
         prefs().edit().putBoolean(LennyxStepService.KEY_ENABLED, false).apply();
+        LennyxWatchdogReceiver.cancel(ctx);
         ctx.stopService(new Intent(ctx, LennyxStepService.class));
         JSObject ret = new JSObject();
         ret.put("running", false);
         call.resolve(ret);
     }
 
-    /** Tous les téléphones n'ont pas de podomètre matériel : il faut le savoir. */
-    private boolean hasStepSensor() {
+    /** Quel podomètre matériel ce téléphone possède-t-il, s'il en a un ? */
+    private String availableSensor() {
         SensorManager sm = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
-        return sm != null && sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) != null;
+        if (sm == null) return "none";
+        if (sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) != null) return "counter";
+        if (sm.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR) != null) return "detector";
+        if (sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) != null) return "accel";
+        return "none";
+    }
+
+    /**
+     * Les surcouches constructeur (One UI en tête) endorment les applications
+     * qui ne sont pas explicitement exemptées : le service est tué et le
+     * comptage s'arrête dès l'écran éteint. Savoir si l'exemption est accordée
+     * est donc la première question du diagnostic.
+     */
+    private boolean batteryExempt() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true;
+        PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+        return pm != null && pm.isIgnoringBatteryOptimizations(getContext().getPackageName());
     }
 
     @PluginMethod
     public void status(PluginCall call) {
+        SharedPreferences p = prefs();
         JSObject ret = new JSObject();
-        ret.put("enabled", prefs().getBoolean(LennyxStepService.KEY_ENABLED, false));
+        ret.put("enabled", p.getBoolean(LennyxStepService.KEY_ENABLED, false));
         ret.put("permission", hasActivityPermission());
-        ret.put("hasStepSensor", hasStepSensor());
-        ret.put("lastUpdate", prefs().getLong("lastUpdate", 0));
+        // Le capteur théoriquement disponible, et celui que le service utilise
+        // réellement : un écart entre les deux signale un service qui n'a jamais
+        // démarré.
+        ret.put("hasStepSensor", !"none".equals(availableSensor()));
+        ret.put("available", availableSensor());
+        ret.put("sensor", p.getString(LennyxStepService.KEY_SENSOR, "none"));
+        ret.put("lastUpdate", p.getLong("lastUpdate", 0));
+        ret.put("heartbeat", p.getLong(LennyxStepService.KEY_HEARTBEAT, 0));
+        ret.put("batteryExempt", batteryExempt());
+        call.resolve(ret);
+    }
+
+    /** Ouvre la demande système d'exemption d'optimisation de batterie. */
+    @PluginMethod
+    public void requestBatteryExemption(PluginCall call) {
+        JSObject ret = new JSObject();
+        if (batteryExempt()) {
+            ret.put("granted", true);
+            call.resolve(ret);
+            return;
+        }
+        try {
+            Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            i.setData(Uri.parse("package:" + getContext().getPackageName()));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(i);
+        } catch (Exception e) {
+            // Certains constructeurs bloquent cet écran : on ouvre la fiche de
+            // l'application, d'où l'utilisateur peut faire le réglage à la main.
+            try {
+                Intent fallback = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                fallback.setData(Uri.parse("package:" + getContext().getPackageName()));
+                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(fallback);
+            } catch (Exception ignored) { }
+        }
+        ret.put("granted", false);
         call.resolve(ret);
     }
 

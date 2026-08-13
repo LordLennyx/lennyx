@@ -46,11 +46,14 @@
                 android:resource="@xml/lennyx_widget_info" />
         </receiver>
 
-        <!-- Présence permanente : compte les pas et veille, app fermée ou non -->
+        <!-- Présence permanente : compte les pas et veille, app fermée ou non.
+             stopWithTask=false : balayer Lennyx hors des récentes ne doit pas
+             arrêter le comptage, c'est précisément là qu'il sert. -->
         <service
             android:name=".LennyxStepService"
             android:enabled="true"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="health" />
 
         <!-- Relance la présence au démarrage du téléphone -->
@@ -64,6 +67,48 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- Vérifie toutes les 15 min que la présence tourne encore : les
+             surcouches constructeur tuent les services sans prévenir. -->
+        <receiver
+            android:name=".LennyxWatchdogReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- ── Réveil et berceuse ─────────────────────────────────────── -->
+
+        <!-- L'écran plein écran, capable de s'afficher par-dessus le verrou.
+             excludeFromRecents : un réveil n'a rien à faire dans l'historique.
+             showOnLockScreen : autorisation déclarée dès le manifeste. -->
+        <activity
+            android:name=".LennyxAlarmActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:showWhenLocked="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/AppTheme.NoActionBar" />
+
+        <!-- Joue l'extrait choisi et pose la notification plein écran -->
+        <service
+            android:name=".LennyxAlarmService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <receiver
+            android:name=".LennyxAlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- Fin de phase du Pomodoro / du chronomètre -->
+        <receiver
+            android:name=".LennyxTimerReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
 
     <!-- Permissions -->
@@ -79,6 +124,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Demandée à l'utilisateur, jamais imposée : sans exemption, One UI
+         endort Lennyx et le comptage s'arrête écran éteint. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Réveil et berceuse : s'imposer par-dessus le verrouillage, jouer le son -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
 
     <!-- Le podomètre matériel : sans lui, le comptage en arrière-plan est impossible -->
     <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />

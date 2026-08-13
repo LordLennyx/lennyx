@@ -85,7 +85,9 @@ interface LennyxState {
   deleteTimeLog: (id: string) => void;
   setAlarm: (kind: 'wake' | 'lullaby', patch: Partial<AlarmDef>) => void;
   setCustomAudioName: (name?: string) => void;
-  recordWake: () => void;
+  recordWake: (at?: string, date?: string) => void;
+  setTimers: (patch: Partial<Profile['timers']>) => void;
+  settlePomodoro: (force?: boolean) => { ended: 'work' | 'break' | 'longBreak'; isLong: boolean } | null;
   addNote: (kind: NoteKind, text: string) => void;
   deleteNote: (id: string) => void;
   addTransaction: (t: { type: TxType; label: string; amount: number; category?: string; date?: string }) => void;
@@ -143,8 +145,8 @@ const defaultProfile = (): Profile => ({
   steps: { goal: 8000, counted: {}, native: {}, manual: {}, bestDay: 0 },
   background: { enabled: false, askedOnce: false },
   alarms: {
-    wake: { on: false, time: '07:00', days: [], melody: 'aube', volume: 0.8 },
-    lullaby: { on: false, time: '22:30', days: [], melody: 'lune', volume: 0.4 },
+    wake: { on: false, time: '07:00', days: [], melody: 'aube', volume: 0.8, repeatMin: 5 },
+    lullaby: { on: false, time: '22:30', days: [], melody: 'lune', volume: 0.4, repeatMin: 0 },
   },
   wakeLog: {},
   oracle: { briefing: true, sentinel: true },
@@ -153,6 +155,10 @@ const defaultProfile = (): Profile => ({
   llm: { provider: 'groq', apiKey: '', model: defaultModelFor('groq'), tone: 'chaleureux' },
   onboarding: { done: false },
   pomodoro: { workMin: 25, breakMin: 5, longBreakMin: 15, longBreakEvery: 4 },
+  timers: {
+    chrono: { startedAt: 0, label: '', taskId: '' },
+    pomodoro: { phase: 'idle', endsAt: 0, remainingMs: 0, cycle: 0 },
+  },
   cloudSync: { enabled: false, url: '', anonKey: '', autoSync: false },
   history: {},
 });
@@ -994,11 +1000,16 @@ export const useStore = create<LennyxState>()(
           })),
         setCustomAudioName: (name) =>
           set((s) => ({ profile: { ...s.profile, alarms: { ...s.profile.alarms, customAudioName: name } } })),
-        recordWake: () => {
+        /**
+         * `at`/`date` permettent de consigner un réveil arrêté depuis l'écran
+         * NATIF alors que l'application était fermée : l'heure remonte au
+         * lancement suivant, elle ne doit pas être remplacée par « maintenant ».
+         */
+        recordWake: (at, date) => {
           const s = get();
-          const t = todayStr();
+          const t = date ?? todayStr();
           if (s.profile.wakeLog[t]) return;
-          const wakeLog = { ...s.profile.wakeLog, [t]: new Date().toTimeString().slice(0, 5) };
+          const wakeLog = { ...s.profile.wakeLog, [t]: at ?? new Date().toTimeString().slice(0, 5) };
           for (const k of Object.keys(wakeLog)) if (k < addDays(t, -90)) delete wakeLog[k];
           set({
             profile: checkAchievements({
@@ -1007,6 +1018,62 @@ export const useStore = create<LennyxState>()(
               counters: { ...s.profile.counters, alarmsStopped: s.profile.counters.alarmsStopped + 1 },
             }),
           });
+        },
+
+        // Les minuteurs vivent dans le profil (donc persistés) : c'est ce qui
+        // leur permet d'être retrouvés intacts après une fermeture de l'app.
+        setTimers: (patch) =>
+          set((s) => ({ profile: { ...s.profile, timers: { ...s.profile.timers, ...patch } } })),
+
+        /**
+         * Solde une phase de Pomodoro arrivée à échéance et enchaîne sur la
+         * suivante, en pause (c'est l'utilisateur qui relance, à dessein).
+         *
+         * Vit dans le store et non dans l'écran Outils : une phase terminée
+         * pendant que l'application était fermée doit être créditée dès la
+         * réouverture, sans dépendre de l'onglet où l'utilisateur atterrit.
+         *
+         * @param force ignore l'échéance (bouton « Passer »).
+         * @returns la phase qui vient de finir, ou null s'il n'y avait rien à solder.
+         */
+        settlePomodoro: (force = false) => {
+          const s = get();
+          const t = s.profile.timers.pomodoro;
+          if (t.phase === 'idle') return null;
+          if (!force && (t.endsAt === 0 || Date.now() < t.endsAt)) return null;
+
+          const cfg = s.profile.pomodoro;
+          const minutes = (p: 'work' | 'break' | 'longBreak') =>
+            p === 'work' ? cfg.workMin : p === 'longBreak' ? cfg.longBreakMin : cfg.breakMin;
+
+          if (t.phase === 'work') {
+            const cycle = t.cycle + 1;
+            const isLong = cycle % cfg.longBreakEvery === 0;
+            const next = isLong ? 'longBreak' : 'break';
+            get().logPomodoro(cfg.workMin);
+            set((st) => ({
+              profile: {
+                ...st.profile,
+                timers: {
+                  ...st.profile.timers,
+                  pomodoro: { phase: next, endsAt: 0, remainingMs: minutes(next) * 60_000, cycle },
+                },
+              },
+            }));
+            return { ended: 'work', isLong };
+          }
+
+          const ended = t.phase;
+          set((st) => ({
+            profile: {
+              ...st.profile,
+              timers: {
+                ...st.profile.timers,
+                pomodoro: { phase: 'work', endsAt: 0, remainingMs: cfg.workMin * 60_000, cycle: t.cycle },
+              },
+            },
+          }));
+          return { ended, isLong: false };
         },
 
         // ── Notes & traces de vie ──────────────────────────────────────────
@@ -1127,6 +1194,9 @@ export const useStore = create<LennyxState>()(
                 llm: { ...defaultProfile().llm, ...data.profile.llm },
                 onboarding: { ...defaultProfile().onboarding, ...data.profile.onboarding },
                 pomodoro: { ...defaultProfile().pomodoro, ...data.profile.pomodoro },
+                // Les minuteurs d'une AUTRE machine n'ont pas de sens ici :
+                // un chrono lancé ailleurs afficherait des heures écoulées.
+                timers: defaultProfile().timers,
                 cloudSync: { ...defaultProfile().cloudSync, ...data.profile.cloudSync },
               },
               quests: data.quests,
@@ -1147,7 +1217,7 @@ export const useStore = create<LennyxState>()(
     },
     {
       name: 'lennyx-save',
-      version: 8,
+      version: 9,
       partialize: (s) => ({
         profile: s.profile,
         quests: s.quests,
@@ -1280,6 +1350,22 @@ export const useStore = create<LennyxState>()(
             ...def,
             ...data.profile,
             steps: { ...def.steps, ...data.profile.steps, native: data.profile.steps?.native ?? {} },
+          };
+        }
+        if (version < 9 && data?.profile) {
+          // v9 : minuteurs persistés (chrono/Pomodoro survivent à la fermeture)
+          // et réveils enrichis (extrait audio, image de fond, relance).
+          const def = defaultProfile();
+          const alarms = data.profile.alarms ?? {};
+          data.profile = {
+            ...def,
+            ...data.profile,
+            timers: data.profile.timers ?? def.timers,
+            alarms: {
+              ...alarms,
+              wake: { ...def.alarms.wake, ...alarms.wake },
+              lullaby: { ...def.alarms.lullaby, ...alarms.lullaby },
+            },
           };
         }
         return data as any;

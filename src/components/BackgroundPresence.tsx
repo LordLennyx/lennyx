@@ -7,7 +7,8 @@ import { useStore, stepsOn } from '../store/useStore';
 import { todayStr } from '../game/engine';
 import { Icon } from './Icon';
 import {
-  backgroundSupported, startBackground, stopBackground, backgroundStatus, type BackgroundStatus,
+  backgroundSupported, startBackground, stopBackground, backgroundStatus,
+  requestBatteryExemption, sensorLabel, type BackgroundStatus,
 } from '../lib/background';
 
 export default function BackgroundPresence({ compact = false }: { compact?: boolean }) {
@@ -82,6 +83,18 @@ export default function BackgroundPresence({ compact = false }: { compact?: bool
   const noSensor = status !== null && !status.hasStepSensor;
   const permissionMissing = status !== null && !status.permission;
   const reallyCounting = !!status?.enabled && !!status?.permission && !!status?.hasStepSensor;
+  // Le service a-t-il vraiment démarré ? S'il n'a pas choisi de capteur alors
+  // que le téléphone en propose un, c'est qu'il n'a jamais tourné — le cas le
+  // plus trompeur, car tout semble activé côté réglages.
+  const serviceMute = !!status?.enabled && status.sensor === 'none' && status.available !== 'none';
+  const heartbeatAge = status?.heartbeat ? Date.now() - status.heartbeat : 0;
+  const staleService = !!status?.enabled && heartbeatAge > 30 * 60_000;
+
+  const askExemption = async () => {
+    await requestBatteryExemption();
+    // Le réglage se fait dans un écran système : on relit à son retour.
+    setTimeout(() => void refresh(), 1200);
+  };
 
   return (
     <div className={compact ? '' : 'card ornate'}>
@@ -122,7 +135,7 @@ export default function BackgroundPresence({ compact = false }: { compact?: bool
         <div className="muted" style={{ marginTop: 10, fontSize: 12.5, lineHeight: 1.7 }}>
           <div>
             <Icon name={status.hasStepSensor ? 'check' : 'close'} size={11} />{' '}
-            Podomètre matériel {status.hasStepSensor ? 'détecté' : 'absent de cet appareil'}
+            Capteur disponible : {sensorLabel(status.available)}
           </div>
           <div>
             <Icon name={status.permission ? 'check' : 'close'} size={11} />{' '}
@@ -132,31 +145,66 @@ export default function BackgroundPresence({ compact = false }: { compact?: bool
             <Icon name={status.enabled ? 'check' : 'close'} size={11} />{' '}
             Service en arrière-plan {status.enabled ? 'actif' : 'arrêté'}
           </div>
+          <div>
+            <Icon name={status.batteryExempt ? 'check' : 'warning'} size={11} />{' '}
+            Mise en veille par le système{' '}
+            {status.batteryExempt ? 'désactivée' : 'ENCORE ACTIVE — c’est ce qui coupe le comptage'}
+          </div>
+          {status.enabled && (
+            <div>
+              <Icon name={status.heartbeat > 0 ? 'heart' : 'warning'} size={11} />{' '}
+              {status.heartbeat > 0
+                ? `Dernier signe de vie du service à ${new Date(status.heartbeat).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+                : 'Le service n’a encore rien mesuré'}
+            </div>
+          )}
           <div style={{ marginTop: 6, color: 'var(--text)' }}>
             Source du comptage :{' '}
             <strong style={{ color: reallyCounting ? 'var(--success)' : 'var(--gold)' }}>
-              {reallyCounting ? 'capteur matériel, en continu' : 'accéléromètre, application ouverte'}
+              {reallyCounting
+                ? `${sensorLabel(status.sensor)}, en continu`
+                : 'accéléromètre, application ouverte'}
             </strong>
           </div>
         </div>
       )}
 
+      {/* L'exemption de batterie est la première cause de comptage muet sur
+          Samsung/Xiaomi/Huawei : on la met en avant, bouton compris. */}
+      {status && !status.batteryExempt && (
+        <div style={{ marginTop: 10 }}>
+          <p className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            Ton téléphone est autorisé à endormir Lennyx : dès que l'écran s'éteint, le service
+            est tué et les pas cessent d'être comptés. Cette autorisation est la seule qui l'en
+            empêche — c'est aussi elle qui permet au Pomodoro et au réveil de tenir.
+          </p>
+          <button className="btn" onClick={() => void askExemption()}>
+            <Icon name="shield" size={14} /> Empêcher la mise en veille de Lennyx
+          </button>
+        </div>
+      )}
+
+      {serviceMute && (
+        <p className="muted" style={{ marginTop: 8, fontSize: 12, color: 'var(--danger)' }}>
+          Le service est marqué actif mais n'a jamais choisi de capteur : Android l'a
+          probablement arrêté. Coupe puis réactive la présence ci-dessus.
+        </p>
+      )}
+      {staleService && !serviceMute && (
+        <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+          Aucun relevé depuis plus d'une demi-heure. Si tu as marché entre-temps, c'est que le
+          système a suspendu Lennyx : accorde-lui l'exemption de veille ci-dessus.
+        </p>
+      )}
       {noSensor && (
         <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-          Cet appareil n'a pas de podomètre matériel : Lennyx compte alors les pas à
-          l'accéléromètre pendant que l'application est ouverte, et tu peux compléter à la main.
+          Cet appareil n'expose aucun capteur de mouvement : le comptage se fera à la main.
         </p>
       )}
       {permissionMissing && !noSensor && (
         <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
           Sans la permission « activité physique », Android interdit le comptage en arrière-plan.
           Tu peux l'accorder depuis les réglages du système (Applications → Lennyx → Autorisations).
-        </p>
-      )}
-      {reallyCounting && (
-        <p className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          Si Android coupe malgré tout le service, désactive l'optimisation de batterie pour
-          Lennyx dans les réglages du système (Batterie → Non restreinte).
         </p>
       )}
     </div>

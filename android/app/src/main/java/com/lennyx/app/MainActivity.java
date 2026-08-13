@@ -9,6 +9,8 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(LennyxWidgetPlugin.class);
         registerPlugin(LennyxBackgroundPlugin.class);
+        registerPlugin(LennyxAlarmPlugin.class);
+        registerPlugin(LennyxTimerPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

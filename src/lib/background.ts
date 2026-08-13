@@ -8,17 +8,25 @@
 
 import { registerPlugin, Capacitor } from '@capacitor/core';
 
+/** Capteur employé pour compter : par ordre de fiabilité décroissante. */
+export type StepSensor = 'counter' | 'detector' | 'accel' | 'none';
+
 export interface BackgroundStatus {
   enabled: boolean; // le service a été démarré
   permission: boolean; // ACTIVITY_RECOGNITION accordée
-  hasStepSensor: boolean; // le téléphone possède un podomètre matériel
+  hasStepSensor: boolean; // le téléphone sait compter des pas d'une façon ou d'une autre
+  available: StepSensor; // le meilleur capteur que possède ce téléphone
+  sensor: StepSensor; // celui que le service utilise réellement
   lastUpdate: number; // horodatage du dernier relevé de pas
+  heartbeat: number; // dernier signe de vie du service, même sans nouveau pas
+  batteryExempt: boolean; // exempté des mises en veille du constructeur
 }
 
 interface LennyxBackgroundPlugin {
   start(options: { offsetToday?: number }): Promise<{ running: boolean; denied?: boolean }>;
   stop(): Promise<{ running: boolean }>;
   status(): Promise<BackgroundStatus>;
+  requestBatteryExemption(): Promise<{ granted: boolean }>;
   getSteps(): Promise<{ days: Record<string, number> }>;
 }
 
@@ -51,8 +59,24 @@ export async function stopBackground(): Promise<void> {
 }
 
 const OFFLINE_STATUS: BackgroundStatus = {
-  enabled: false, permission: false, hasStepSensor: false, lastUpdate: 0,
+  enabled: false, permission: false, hasStepSensor: false, available: 'none',
+  sensor: 'none', lastUpdate: 0, heartbeat: 0, batteryExempt: false,
 };
+
+/**
+ * Demande l'exemption d'optimisation de batterie. Sans elle, les surcouches
+ * constructeur (One UI en particulier) endorment l'application et le service
+ * meurt dès l'écran éteint — le comptage s'arrête alors sans rien signaler.
+ */
+export async function requestBatteryExemption(): Promise<boolean> {
+  if (!backgroundSupported()) return false;
+  try {
+    const { granted } = await Background.requestBatteryExemption();
+    return granted;
+  } catch {
+    return false;
+  }
+}
 
 export async function backgroundStatus(): Promise<BackgroundStatus> {
   if (!backgroundSupported()) return OFFLINE_STATUS;
@@ -64,16 +88,14 @@ export async function backgroundStatus(): Promise<BackgroundStatus> {
   }
 }
 
-/**
- * Le service natif compte-t-il RÉELLEMENT les pas en ce moment ?
- * Tant que ce n'est pas le cas (présence coupée, permission refusée, ou
- * téléphone sans podomètre matériel), l'accéléromètre doit reprendre la main —
- * sinon plus rien n'est compté du tout.
- */
-export async function nativeCountingActive(): Promise<boolean> {
-  if (!backgroundSupported()) return false;
-  const st = await backgroundStatus();
-  return st.enabled && st.permission && st.hasStepSensor;
+/** Nom lisible du capteur, pour le diagnostic affiché à l'utilisateur. */
+export function sensorLabel(s: StepSensor): string {
+  switch (s) {
+    case 'counter': return 'podomètre matériel';
+    case 'detector': return 'détecteur de pas matériel';
+    case 'accel': return 'accéléromètre (repli)';
+    default: return 'aucun';
+  }
 }
 
 /** Compteurs journaliers accumulés en arrière-plan (date → pas). */

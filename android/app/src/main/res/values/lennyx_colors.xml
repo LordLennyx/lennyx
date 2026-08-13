@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Palette de Lennyx côté natif, alignée sur src/styles/global.css. -->
+<resources>
+    <color name="lennyx_gold">#D4AF37</color>
+    <color name="lennyx_gold_dim">#9A7B1E</color>
+    <color name="lennyx_ink">#0A0A0D</color>
+    <color name="lennyx_text">#EAE6DC</color>
+    <color name="lennyx_muted">#8F8A80</color>
+    <color name="lennyx_frame">#3A2F14</color>
+</resources>

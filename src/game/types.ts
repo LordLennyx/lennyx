@@ -51,8 +51,27 @@ export interface AlarmDef {
   on: boolean;
   time: string; // HH:MM
   days: number[]; // vide = tous les jours
-  melody: string; // id de mélodie ('custom' = fichier importé)
+  melody: string; // id de mélodie ('custom' = fichier importé, 'file' = son de l'appareil)
   volume: number; // 0..1
+  /**
+   * Extrait choisi dans un fichier audio de l'appareil. Le fichier lui-même
+   * vit dans IndexedDB (couche web) et dans le stockage privé de l'application
+   * (couche native) — jamais dans la sauvegarde de jeu, qui doit rester légère.
+   */
+  audio?: {
+    name: string; // nom d'origine, pour l'afficher
+    startMs: number; // début de la zone délimitée
+    endMs: number; // fin de la zone délimitée
+    durationMs: number; // durée totale du fichier
+    nativePath?: string; // chemin transmis à Android
+  };
+  /** Fond affiché pendant la sonnerie, choisi dans la galerie. */
+  image?: {
+    name: string;
+    nativePath?: string;
+  };
+  label?: string; // phrase affichée sur l'écran de réveil
+  repeatMin: number; // relance toutes les N minutes tant qu'on n'a pas arrêté
 }
 
 // ── Notes & Traces de vie ──────────────────────────────────────────────
@@ -203,6 +222,24 @@ export interface Profile {
     breakMin: number;
     longBreakMin: number;
     longBreakEvery: number; // toutes les N sessions de travail
+  };
+  /**
+   * Minuteurs en cours, décrits par des INSTANTS et non par des durées qui
+   * s'égrènent. C'est ce qui leur permet de survivre à la fermeture de
+   * l'application : à la réouverture, on soustrait, on ne rattrape pas.
+   */
+  timers: {
+    chrono: {
+      startedAt: number; // 0 = à l'arrêt
+      label: string;
+      taskId: string;
+    };
+    pomodoro: {
+      phase: 'idle' | 'work' | 'break' | 'longBreak';
+      endsAt: number; // 0 = en pause manuelle ou à l'arrêt
+      remainingMs: number; // ce qui reste quand la phase est suspendue
+      cycle: number; // sessions de travail bouclées dans ce cycle
+    };
   };
   cloudSync: {
     enabled: boolean;

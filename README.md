@@ -212,6 +212,57 @@ du téléphone, passage à minuit) est vérifiée par une simulation qui rejoue 
 elle a d'ailleurs attrapé un dernier bug avant livraison : l'acquis transmis était effacé au tout
 premier démarrage du service.
 
+## 🌙 Nouveautés v0.8 — le réveil cinématographique, et des outils qui ne dorment plus
+
+### Réveil et berceuse : ton image, ton morceau, plein écran
+
+Jusqu'ici, un réveil ne produisait qu'une notification. Désormais **Lennyx prend l'écran**, quel
+que soit l'état du téléphone — verrouillé, éteint, ou en pleine autre application.
+
+- **Ton morceau, ta portion.** Choisis un fichier audio de l'appareil, puis délimite à la main le
+  passage exact qui te réveillera : la forme d'onde s'affiche, deux poignées se font glisser, et
+  l'extrait s'écoute avant validation. C'est cette portion qui tournera en boucle.
+- **Ton image.** Une photo de la galerie devient le fond de l'écran de réveil. Lennyx se contente
+  de la signer : un filet or, son nom en petit, l'heure. La photo reste la vedette.
+- **Il insiste.** Le réveil revient toutes les 2, 5, 10 ou 15 minutes — à ton choix — tant que tu
+  n'as pas appuyé sur « Je suis debout ». Le bouton retour ne le congédie pas.
+- **Un essai sans conséquence.** « Essayer maintenant » déclenche l'écran réel ; à l'arrêt, le
+  réglage revient exactement dans l'état où il était, réveil éteint compris.
+
+Trois mécanismes Android s'additionnent pour y arriver, et aucun n'est superflu : `setAlarmClock`
+(seule programmation qui traverse le mode Doze sans être repoussée), la notification à *intention
+plein écran* (seul moyen, depuis Android 10, qu'une application en arrière-plan ouvre un écran),
+et `showWhenLocked` + `turnScreenOn` sur l'activité. Le son passe par le flux ALARME : il reste
+audible en silencieux, et le canal ignore le mode « Ne pas déranger ».
+
+### Chronomètre et Pomodoro en arrière-plan
+
+Ils vivaient dans la mémoire de la page : réduire la fenêtre les figeait, la fermer les effaçait.
+Ils sont maintenant décrits par des **instants** (départ, échéance) et non par un compteur qui
+s'égrène — on soustrait à la réouverture, on ne rattrape rien.
+
+- Une **notification-chronomètre** qu'Android anime lui-même, en avant pour le chrono, en
+  décompte pour le Pomodoro. Aucun processus ne tourne pour ça.
+- Une **alarme exacte** à la fin de phase, qui sonne même application fermée.
+- Un Pomodoro terminé pendant l'absence est **crédité dès la réouverture**, quel que soit l'onglet
+  où l'on retombe — et sans sonner deux fois.
+
+### Présence permanente : trois capteurs plutôt qu'un
+
+Le comptage s'arrêtait dès la fermeture de l'application sur certains appareils. Deux causes,
+toutes deux traitées :
+
+- **Chaîne de repli de capteurs.** Le service tente le podomètre matériel (`STEP_COUNTER`), puis
+  le détecteur de pas, puis l'accéléromètre avec maintien du processeur. Un téléphone sans
+  podomètre matériel compte désormais lui aussi, écran éteint.
+- **Chien de garde.** Un réveil exact vérifie toutes les quinze minutes que le service tourne
+  encore et le relance sinon — les surcouches constructeur tuent les services sans prévenir.
+  Le service survit aussi au balayage hors des applications récentes (`stopWithTask=false`).
+- **Exemption de veille, demandée en un bouton.** C'est la première cause de comptage muet sur
+  One UI : le diagnostic la signale en clair et propose l'écran système correspondant.
+- Le diagnostic dit maintenant **quel capteur sert réellement** et **quand le service a donné
+  signe de vie** — de quoi distinguer « service mort » de « tu n'as pas marché ».
+
 ## 🛠️ Stack
 
 | Couche | Techno |
@@ -268,7 +319,9 @@ npm run electron:build
   chiffrés, Pomodoro, widget Android enrichi, fournisseur Groq + corrections v0.5.1
 - [x] **v0.7** — Présence permanente Android (capteur matériel, service de premier plan, relance
   au démarrage), Oracle qui agit vraiment, escalade des rappels et 7 sonneries, refonte mobile
-- [ ] **v0.8** — Social : amis, défis, classements (nécessite un backend supplémentaire —
+- [x] **v0.8** — Réveil plein écran natif (extrait audio découpé + image de fond), chronomètre et
+  Pomodoro qui survivent en arrière-plan, comptage de pas à trois capteurs avec chien de garde
+- [ ] **v0.9** — Social : amis, défis, classements (nécessite un backend supplémentaire —
   même projet Supabase envisagé, à étendre)
 - [ ] **v1.0** — Boss de la semaine, saisons, quêtes d'histoire
 

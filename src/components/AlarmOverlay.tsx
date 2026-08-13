@@ -1,8 +1,16 @@
 // ── Réveil & berceuse : surveillance de l'heure + écran plein écran ───────
+//
+// ⚠ Cet overlay est le réveil de Windows et du web UNIQUEMENT. Sur Android,
+// c'est LennyxAlarmActivity qui s'en charge : elle s'affiche par-dessus l'écran
+// de verrouillage, avec l'image et l'extrait choisis, même application fermée.
+// Laisser les deux tourner ferait sonner le réveil en double dès que Lennyx
+// serait ouvert à l'heure dite.
 import { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { isScheduledOn, todayStr, nowTimeStr } from '../game/engine';
-import { playMelody, stopMelody, MELODIES } from '../lib/melodies';
+import { playMelody, playSegment, stopMelody, MELODIES } from '../lib/melodies';
+import { alarmNativeSupported } from '../lib/alarmBridge';
+import { getMedia, type MediaKey } from '../lib/mediaStore';
 import { Icon } from './Icon';
 
 const FIRED_KEY = 'lennyx-alarm-fired';
@@ -29,6 +37,21 @@ function markAlarmFired(kind: string) {
   }
 }
 
+/**
+ * L'extrait personnel prime sur les mélodies synthétisées : c'est ce que
+ * l'utilisateur a choisi, et c'est ce qu'Android jouerait de son côté.
+ */
+async function startSound(kind: 'wake' | 'lullaby', a: { melody: string; volume: number; audio?: { startMs: number; endMs: number } }) {
+  if (a.audio) {
+    const blob = await getMedia(`${kind}-audio` as MediaKey);
+    if (blob) {
+      playSegment(blob, a.audio.startMs, a.audio.endMs, a.volume);
+      return;
+    }
+  }
+  playMelody(a.melody, a.volume);
+}
+
 export default function AlarmOverlay() {
   const alarms = useStore((s) => s.profile.alarms);
   const recordWake = useStore((s) => s.recordWake);
@@ -36,8 +59,28 @@ export default function AlarmOverlay() {
   const [active, setActive] = useState<'wake' | 'lullaby' | null>(null);
   const [snoozeUntil, setSnoozeUntil] = useState(0);
   const [clock, setClock] = useState(nowTimeStr());
+  const [bgUrl, setBgUrl] = useState<string | null>(null);
+
+  // Le fond n'est chargé qu'au déclenchement : inutile de garder une image en
+  // mémoire toute la journée pour un réveil de quelques minutes.
+  useEffect(() => {
+    if (!active) {
+      setBgUrl((old) => { if (old) URL.revokeObjectURL(old); return null; });
+      return;
+    }
+    let url: string | null = null;
+    void (async () => {
+      const blob = await getMedia(`${active}-image` as MediaKey);
+      if (blob) {
+        url = URL.createObjectURL(blob);
+        setBgUrl(url);
+      }
+    })();
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [active]);
 
   useEffect(() => {
+    if (alarmNativeSupported()) return; // Android a son propre écran de réveil
     const check = () => {
       setClock(nowTimeStr());
       if (active) return;
@@ -53,7 +96,7 @@ export default function AlarmOverlay() {
           markAlarmFired(kind);
           setSnoozeUntil(0);
           setActive(kind);
-          playMelody(a.melody, a.volume);
+          void startSound(kind, a);
           if (kind === 'lullaby') {
             // la berceuse s'éteint seule après 20 minutes
             setTimeout(() => {
@@ -73,9 +116,10 @@ export default function AlarmOverlay() {
   if (!active) return null;
   const isWake = active === 'wake';
   const melodyName =
-    alarms[active].melody === 'custom'
+    alarms[active].audio?.name
+    ?? (alarms[active].melody === 'custom'
       ? alarms.customAudioName ?? 'Fichier personnel'
-      : MELODIES.find((m) => m.id === alarms[active].melody)?.name ?? '';
+      : MELODIES.find((m) => m.id === alarms[active].melody)?.name ?? '');
 
   const stop = () => {
     stopMelody();
@@ -94,9 +138,27 @@ export default function AlarmOverlay() {
   };
 
   return (
-    <div className="overlay" style={{ zIndex: 120, flexDirection: 'column', gap: 24 }}>
+    <div
+      className="overlay"
+      style={{
+        zIndex: 120, flexDirection: 'column', gap: 24,
+        // Le fond choisi par l'utilisateur, voilé pour garder l'heure lisible.
+        ...(bgUrl
+          ? {
+              backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0.78), rgba(0,0,0,0.45) 45%, rgba(0,0,0,0.88)), url(${bgUrl})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }
+          : {}),
+      }}
+    >
       <div style={{ textAlign: 'center' }}>
-        <Icon name={isWake ? 'sun' : 'moon'} size={72} stroke={1.1} style={{ color: 'var(--gold)' }} />
+        {!bgUrl && <Icon name={isWake ? 'sun' : 'moon'} size={72} stroke={1.1} style={{ color: 'var(--gold)' }} />}
+        {bgUrl && (
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 12, letterSpacing: '0.42em', color: 'var(--gold)', marginBottom: 10 }}>
+            LENNYX
+          </div>
+        )}
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 56, letterSpacing: '0.1em', margin: '12px 0 4px' }}>
           {clock}
         </div>

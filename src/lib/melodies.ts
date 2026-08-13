@@ -136,6 +136,31 @@ function playSequence(def: MelodyDef, volume: number) {
   loopTimer = setTimeout(() => playSequence(def, volume), total + 400);
 }
 
+/**
+ * Joue l'extrait choisi par l'utilisateur, en boucle sur la seule portion
+ * délimitée — l'équivalent web de ce que fait LennyxAlarmService sur Android,
+ * pour que le réveil de Windows sonne exactement pareil.
+ */
+export function playSegment(blob: Blob, startMs: number, endMs: number, volume: number) {
+  stopMelody();
+  playing = true;
+  try {
+    audioEl = new Audio(URL.createObjectURL(blob));
+    audioEl.volume = Math.min(1, volume);
+    audioEl.currentTime = startMs / 1000;
+    const el = audioEl;
+    el.ontimeupdate = () => {
+      if (endMs > startMs && el.currentTime * 1000 >= endMs) el.currentTime = startMs / 1000;
+    };
+    // Filet : si la fin de l'extrait coïncide avec la fin du fichier, la
+    // relance par ontimeupdate n'a pas le temps de se produire.
+    el.onended = () => { el.currentTime = startMs / 1000; void el.play(); };
+    void el.play();
+  } catch {
+    playing = false;
+  }
+}
+
 /** Joue une mélodie en boucle (ou le fichier importé si id === 'custom'). */
 export function playMelody(id: string, volume: number) {
   stopMelody();

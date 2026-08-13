@@ -1,6 +1,6 @@
 // Service worker de Lennyx : cache-first après premier chargement → l'app
 // fonctionne 100 % hors-ligne une fois installée.
-const CACHE = 'lennyx-v0.7.2';
+const CACHE = 'lennyx-v0.8.0';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./'])).then(() => self.skipWaiting()));

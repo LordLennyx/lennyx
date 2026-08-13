@@ -20,6 +20,8 @@ import Logo from './components/Logo';
 import { Icon, Sigil } from './components/Icon';
 import { useNotifications } from './hooks/useNotifications';
 import { useSteps } from './hooks/useSteps';
+import { useNativeAlarms } from './hooks/useNativeAlarms';
+import { useTimers } from './hooks/useTimers';
 import AlarmOverlay from './components/AlarmOverlay';
 import Onboarding from './components/Onboarding';
 import { setSoundPrefs } from './lib/sound';
@@ -68,6 +70,8 @@ export default function App() {
   useNotifications();
   // podomètre (capteur de mouvement)
   useSteps();
+  useNativeAlarms();
+  useTimers();
   useEffect(() => {
     if (profile.notify.enabled) void ensurePermission();
   }, [profile.notify.enabled]);
