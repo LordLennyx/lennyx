@@ -1,5 +1,5 @@
 {
-  "id": "/lennyx",
+  "_note": "Pas de champ id : le navigateur retombe alors sur start_url, ce qui identifie correctement l'application quel que soit le sous-dossier où elle est publiée (GitHub Pages sert les projets sous /nom-du-depot/).",
   "name": "Lennyx — Ordre & Gloire",
   "short_name": "Lennyx",
   "description": "La to-do list gamifiée : quêtes, XP, streaks, or et gloire.",
