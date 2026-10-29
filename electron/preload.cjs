@@ -16,6 +16,11 @@ contextBridge.exposeInMainWorld('lennyxLLM', {
   request: (opts) => ipcRenderer.invoke('lennyx-llm-request', opts),
 });
 
+// Icône de fenêtre pilotée par l'humeur de l'application (v0.9).
+contextBridge.exposeInMainWorld('lennyxIcon', {
+  set: (mood) => ipcRenderer.invoke('lennyx-icon-mood', mood),
+});
+
 contextBridge.exposeInMainWorld('lennyxWidget', {
   toggle: () => ipcRenderer.invoke('lennyx-widget-toggle'),
   openApp: () => ipcRenderer.invoke('lennyx-widget-open-app'),

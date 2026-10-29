@@ -1,7 +1,7 @@
 {
   "name": "lennyx",
   "productName": "Lennyx",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Lennyx — la to-do list gamifiée. Transforme tes tâches en quêtes épiques.",
   "author": "Lens Daniels <lensdaniels237@gmail.com>",
   "private": true,
@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "node scripts/test.mjs",
     "gen:icon": "node scripts/gen-icon.mjs",
     "gen:sounds": "node scripts/gen-sounds.mjs",
     "electron:dev": "npm run build && electron .",

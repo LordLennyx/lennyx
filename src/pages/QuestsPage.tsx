@@ -5,6 +5,8 @@ import type { Quest } from '../game/types';
 import { Icon } from '../components/Icon';
 import { CompleteButton, DiffTag } from '../components/TaskRow';
 import { LIBRARY, rubrique } from '../game/library';
+import MicButton from '../components/MicButton';
+import VoiceCapture from '../components/VoiceCapture';
 
 function QuestForm({ onClose }: { onClose: () => void }) {
   const addQuest = useStore((s) => s.addQuest);
@@ -25,7 +27,23 @@ function QuestForm({ onClose }: { onClose: () => void }) {
   return (
     <div className="overlay" onClick={onClose}>
       <div className="form-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Forger une quête</h3>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h3>Forger une quête</h3>
+          <MicButton
+            heading="Dicter une quête"
+            onFill={(d) => {
+              // Le brouillon a déjà été relu dans l'écran de dictée : on
+              // remplit sans rien écraser de ce qui n'a pas été dicté.
+              setTitle(d.title);
+              if (d.description) setDescription(d.description);
+              setDifficulty(d.difficulty);
+              setType(d.isEvent ? 'event' : 'quest');
+              if (d.category) setCategory(d.category);
+              if (d.deadline) setDeadline(d.deadline);
+              if (d.subquests.length > 0) setSubs(d.subquests);
+            }}
+          />
+        </div>
         <input className="input" placeholder="Titre de la quête *" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} />
         <textarea className="input" placeholder="Description (optionnel)" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
         <div className="row">
@@ -146,6 +164,7 @@ function QuestCard({ quest }: { quest: Quest }) {
 export default function QuestsPage() {
   const quests = useStore((s) => s.quests);
   const [showForm, setShowForm] = useState(false);
+  const [showVoice, setShowVoice] = useState(false);
   const [tab, setTab] = useState<'active' | 'done'>('active');
 
   const active = quests.filter((q) => !q.completedAt);
@@ -156,9 +175,14 @@ export default function QuestsPage() {
     <div>
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
         <h2 className="page-title">Quêtes</h2>
-        <button className="btn primary" onClick={() => setShowForm(true)}>
-          <Icon name="plus" size={14} /> Nouvelle quête
-        </button>
+        <div className="row">
+          <button className="btn" onClick={() => setShowVoice(true)}>
+            <Icon name="mic" size={14} /> Dicter
+          </button>
+          <button className="btn primary" onClick={() => setShowForm(true)}>
+            <Icon name="plus" size={14} /> Nouvelle quête
+          </button>
+        </div>
       </div>
       <p className="page-sub">Chaque quête accomplie forge ta légende.</p>
       <div className="row" style={{ marginBottom: 14 }}>
@@ -177,6 +201,13 @@ export default function QuestsPage() {
         list.map((q) => <QuestCard key={q.id} quest={q} />)
       )}
       {showForm && <QuestForm onClose={() => setShowForm(false)} />}
+      {showVoice && (
+        <VoiceCapture
+          heading="Dicter des quêtes"
+          intro="Énumère tes quêtes d'un trait — difficulté, rubrique, échéance et étapes comprises."
+          onClose={() => setShowVoice(false)}
+        />
+      )}
     </div>
   );
 }

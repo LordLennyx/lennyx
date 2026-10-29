@@ -33,6 +33,8 @@ import { backgroundSupported, startBackground } from './lib/background';
 import { pushWidgetData } from './lib/widget';
 import { stepsOn } from './store/useStore';
 import { isScheduledOn, todayStr } from './game/engine';
+import { computeMood } from './game/mood';
+import { applyMoodIcon } from './lib/appIcon';
 
 type PageId =
   | 'home' | 'quests' | 'dailies' | 'library' | 'oracle' | 'tools' | 'notes'
@@ -157,6 +159,13 @@ export default function App() {
     })();
   }, [profile.onboarding.done, profile.background.enabled, profile.background.askedOnce, setBackground]);
 
+  // ── L'humeur de Lennyx (v0.9) ──
+  // Un seul calcul, trois destinations : le widget, l'icône du lanceur et le
+  // blason de l'accueil. `quests` et `dailies` viennent du store ; le résultat
+  // est recalculé à chaque changement pertinent, pas à chaque rendu.
+  const quests = useStore((s) => s.quests);
+  const mood = computeMood({ profile, quests, dailies });
+
   // widget natif Android : pousse l'instantané à chaque changement pertinent
   useEffect(() => {
     const t = todayStr();
@@ -172,8 +181,23 @@ export default function App() {
       streak: profile.currentStreak,
       pending,
       nextAlarm: wake.on && isScheduledOn(wake.days, t) ? wake.time : '',
+      mood: mood.id,
+      moodLine: mood.line,
+      nextTask: mood.nextTask ?? '',
+      doneToday: mood.doneToday,
+      totalToday: mood.totalToday,
     });
-  }, [profile.name, info.level, info.rank.name, info.progress, profile.steps, profile.currentStreak, profile.alarms.wake, dailies]);
+  }, [
+    profile.name, info.level, info.rank.name, info.progress, profile.steps,
+    profile.currentStreak, profile.alarms.wake, dailies,
+    mood.id, mood.line, mood.nextTask, mood.doneToday, mood.totalToday,
+  ]);
+
+  // Icône de l'application : elle ne bascule que si l'humeur a changé pour de
+  // bon (le plugin et appIcon.ts se chargent du verrou anti-va-et-vient).
+  useEffect(() => {
+    void applyMoodIcon(mood.id, profile.moodIcon);
+  }, [mood.id, profile.moodIcon]);
 
   // applique la palette du thème actif
   useEffect(() => {

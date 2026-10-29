@@ -11,6 +11,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(LennyxBackgroundPlugin.class);
         registerPlugin(LennyxAlarmPlugin.class);
         registerPlugin(LennyxTimerPlugin.class);
+        registerPlugin(LennyxSpeechPlugin.class);
+        registerPlugin(LennyxIconPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -217,6 +217,24 @@ export interface Profile {
     goal?: string; // objectif de discipline choisi
     rhythm?: string; // rythme de vie choisi
   };
+  /**
+   * Dictée vocale (v0.9) — tout se passe sur l'appareil.
+   * `offlineOnly` exige la reconnaissance hors ligne : sans elle, Android
+   * tenterait un aller-retour réseau, ce que l'on refuse par principe.
+   * `autoCreate` crée sans écran de validation — réservé aux habitués.
+   */
+  dictation: {
+    offlineOnly: boolean;
+    autoCreate: boolean;
+    /** Nombre de dictées menées à bien, pour l'affichage et les succès. */
+    used: number;
+  };
+  /**
+   * L'icône du lanceur Android change avec l'humeur de l'application.
+   * Désactivable : sur certains lanceurs, la bascule fait tomber le raccourci
+   * posé sur l'écran d'accueil.
+   */
+  moodIcon: boolean;
   pomodoro: {
     workMin: number;
     breakMin: number;

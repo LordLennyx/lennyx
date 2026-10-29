@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { isScheduledOn, todayStr } from '../game/engine';
 import { levelFromXp } from '../game/xp';
 import { Icon } from '../components/Icon';
 import { CompleteButton, DiffTag } from '../components/TaskRow';
 import { rubrique } from '../game/library';
+import { computeMood, moodDef } from '../game/mood';
+import VoiceCapture from '../components/VoiceCapture';
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -15,8 +18,14 @@ function greeting(): string {
 
 export default function HomePage({ goTo }: { goTo: (p: string) => void }) {
   const { profile, quests, dailies, completeDaily, completeQuest } = useStore();
+  const [showVoice, setShowVoice] = useState(false);
   const t = todayStr();
   const info = levelFromXp(profile.xp);
+  // ⚠️ `computeMood` renvoie un objet neuf à chaque appel : il doit rester
+  // dans le corps du composant, JAMAIS dans un sélecteur `useStore(...)`
+  // — ce serait exactement le piège Zustand qui a fait boucler NotesPage.
+  const mood = computeMood({ profile, quests, dailies });
+  const moodStyle = moodDef(mood.id);
 
   const dueDailies = dailies.filter((d) => isScheduledOn(d.days, t));
   const doneToday = dueDailies.filter((d) => d.lastCompletedDate === t);
@@ -35,6 +44,32 @@ export default function HomePage({ goTo }: { goTo: (p: string) => void }) {
       <p className="page-sub">
         Encore {info.xpNeeded - info.xpInLevel} XP avant le niveau {Math.min(info.level + 1, 100)}.
       </p>
+
+      {/* La dictée du matin : une phrase, et la journée est posée. */}
+      <button
+        className="btn primary"
+        style={{ width: '100%', justifyContent: 'center', marginBottom: 12, padding: '13px 18px' }}
+        onClick={() => setShowVoice(true)}
+      >
+        <Icon name="mic" size={16} /> Annoncer ma journée à voix haute
+      </button>
+
+      {/* Le visage de Lennyx — la même humeur que l'icône et le widget. */}
+      <div className="mood-crest" style={{ borderColor: `${moodStyle.ring}55`, marginBottom: 12 }}>
+        <img src={`${import.meta.env.BASE_URL}icons/mood-${mood.id}.svg`} alt="" />
+        <div className="grow" style={{ minWidth: 0 }}>
+          <div className="mood-name" style={{ color: moodStyle.ring }}>
+            Lennyx est {moodStyle.label.toLowerCase()}
+          </div>
+          <div className="mood-line muted">{mood.line}</div>
+          <div className="mood-gauge">
+            <div style={{ width: `${mood.score}%`, background: `linear-gradient(90deg, ${moodStyle.ring}, ${moodStyle.accent})` }} />
+          </div>
+        </div>
+        <span className="badge" title="Satisfaction de Lennyx" style={{ color: moodStyle.ring }}>
+          {mood.score}
+        </span>
+      </div>
 
       <div className="card ornate row" style={{ gap: 24, flexWrap: 'wrap' }}>
         <div className="level-ring">
@@ -157,6 +192,13 @@ export default function HomePage({ goTo }: { goTo: (p: string) => void }) {
             Voir les {activeQuests.length} quêtes <Icon name="chevron" size={12} />
           </button>
         </p>
+      )}
+      {showVoice && (
+        <VoiceCapture
+          heading="Dictée du matin"
+          intro="Annonce tout d’un trait : quêtes, quotidiennes, notes, dépenses. Tu relis avant que ça existe."
+          onClose={() => setShowVoice(false)}
+        />
       )}
     </div>
   );

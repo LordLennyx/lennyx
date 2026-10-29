@@ -31,6 +31,12 @@ public class LennyxWidgetPlugin extends Plugin {
         editor.putInt("streak", call.getInt("streak", 0));
         editor.putInt("pending", call.getInt("pending", 0));
         editor.putString("nextAlarm", call.getString("nextAlarm", ""));
+        // Humeur : le widget change de visage avec la satisfaction de Lennyx.
+        editor.putString("mood", call.getString("mood", "serein"));
+        editor.putString("moodLine", call.getString("moodLine", ""));
+        editor.putString("nextTask", call.getString("nextTask", ""));
+        editor.putInt("doneToday", call.getInt("doneToday", 0));
+        editor.putInt("totalToday", call.getInt("totalToday", 0));
         editor.apply();
 
         LennyxWidgetProvider.updateAll(ctx);

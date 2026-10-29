@@ -10,20 +10,107 @@
         android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme">
 
+        <!-- ⚠️ MainActivity ne porte PLUS l'intent-filter LAUNCHER : ce sont les
+             activity-alias ci-dessous qui le portent, chacun avec son icône
+             d'humeur. Un seul est actif à la fois (LennyxIconPlugin).
+             Ne JAMAIS désactiver MainActivity : un alias qui pointe vers une
+             activité désactivée ne lance plus rien. -->
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
-            android:exported="true">
+            android:exported="true" />
 
+        <!-- ── Les six visages de Lennyx ──────────────────────────────────
+             L'icône du lanceur reflète la satisfaction de l'application. Seul
+             « serein » est actif à l'installation ; le plugin bascule ensuite.
+             Désactiver la fonction dans les Réglages rappelle `reset()`, qui
+             remet celui-ci. -->
+        <activity-alias
+            android:name=".LaunchGlorieux"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_glorieux"
+            android:roundIcon="@mipmap/ic_launcher_glorieux_round"
+            android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity-alias>
 
-        </activity>
+        <activity-alias
+            android:name=".LaunchFier"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_fier"
+            android:roundIcon="@mipmap/ic_launcher_fier_round"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LaunchSerein"
+            android:targetActivity=".MainActivity"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_serein"
+            android:roundIcon="@mipmap/ic_launcher_serein_round"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LaunchVigilant"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_vigilant"
+            android:roundIcon="@mipmap/ic_launcher_vigilant_round"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LaunchInquiet"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_inquiet"
+            android:roundIcon="@mipmap/ic_launcher_inquiet_round"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".LaunchEteint"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_eteint"
+            android:roundIcon="@mipmap/ic_launcher_eteint_round"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -114,6 +201,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Dictée vocale : la reconnaissance tourne sur l'appareil, le micro est
+         la seule permission nécessaire. Aucune donnée ne sort. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
@@ -136,4 +226,17 @@
 
     <!-- Le podomètre matériel : sans lui, le comptage en arrière-plan est impossible -->
     <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- ⚠️ Android 11+ filtre la visibilité des paquets : sans cette
+         déclaration, SpeechRecognizer.isRecognitionAvailable() renvoie false
+         alors qu'un moteur de reconnaissance est bel et bien installé. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 </manifest>

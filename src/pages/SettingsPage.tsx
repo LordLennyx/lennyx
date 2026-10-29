@@ -11,6 +11,8 @@ import { encryptText, decryptText, isEncryptedPayload } from '../lib/crypto';
 import CloudSyncSection from '../components/CloudSyncSection';
 import BackgroundPresence from '../components/BackgroundPresence';
 import InstallSection from '../components/InstallSection';
+import DictationSection from '../components/DictationSection';
+import MoodIconSection from '../components/MoodIconSection';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -396,6 +398,10 @@ export default function SettingsPage() {
       <SyncSection />
 
       <BackgroundPresence />
+
+      <DictationSection />
+
+      <MoodIconSection />
 
       <div className="card">
         <SectionTitle>Animations</SectionTitle>

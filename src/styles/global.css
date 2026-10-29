@@ -628,6 +628,45 @@ input[type='date'] {
 .form-modal h3 { font-family: var(--font-display); letter-spacing: 0.08em; font-size: 18px; }
 .form-modal label > .muted { display: block; margin-bottom: 5px; font-size: 12px; }
 
+/* ── Dictée vocale (v0.9) ── */
+/* Plus large que les autres formulaires : on y relit une transcription et
+   plusieurs brouillons côte à côte. */
+.voice-modal { width: min(680px, 100%); }
+
+/* Un lien dans un paragraphe, sans la lourdeur d'un bouton. */
+.linklike {
+  background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+  color: var(--gold); text-decoration: underline; text-underline-offset: 2px;
+}
+.linklike:hover { color: var(--accent2); }
+
+/* Le niveau sonore : cinq barres qui respirent avec la voix. */
+.voice-level { display: flex; align-items: center; gap: 3px; height: 22px; }
+.voice-level span {
+  display: block; width: 3px; height: 18px; border-radius: 2px;
+  background: linear-gradient(180deg, var(--gold), var(--accent2));
+  transform-origin: center;
+  transition: transform 90ms linear;
+}
+
+/* Le bouton micro posé dans l'en-tête d'un formulaire. */
+.mic-btn { display: inline-flex; align-items: center; gap: 6px; }
+.mic-btn.recording { color: var(--danger); border-color: var(--danger); }
+
+/* ── Blason d'humeur (v0.9) ── */
+.mood-crest {
+  display: flex; align-items: center; gap: 13px;
+  border: 1px solid var(--border); border-radius: 16px;
+  padding: 13px 16px; background: var(--panel);
+}
+.mood-crest img { width: 46px; height: 46px; border-radius: 12px; flex: 0 0 auto; }
+.mood-crest .mood-name {
+  font-family: var(--font-display); letter-spacing: 0.08em; font-size: 15px;
+}
+.mood-crest .mood-line { font-size: 13px; margin-top: 2px; }
+.mood-gauge { height: 5px; border-radius: 3px; background: #ffffff14; overflow: hidden; margin-top: 7px; }
+.mood-gauge > div { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+
 /* graphe à barres */
 .bars { display: flex; align-items: flex-end; gap: 5px; height: 120px; }
 .bars .bar {

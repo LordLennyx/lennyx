@@ -1,39 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Widget de Lennyx. Depuis la v0.9, il porte le BLASON D'HUMEUR : le visage
+     de l'application change selon sa satisfaction, et le liseré du cadre avec
+     lui. Le fond (@id/widget_root) est remplacé à l'exécution par
+     widget_frame_<humeur> — ne pas le figer ici. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="14dp"
-    android:background="@drawable/widget_background">
+    android:background="@drawable/widget_frame_serein">
 
-    <!-- Ligne 1 : monogramme, nom, niveau/rang -->
+    <!-- Ligne 1 : blason d'humeur, nom, niveau -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="L"
-            android:textColor="#D4AF37"
-            android:textSize="22sp"
-            android:textStyle="bold" />
+        <ImageView
+            android:id="@+id/widget_crest"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/crest_serein" />
 
-        <TextView
-            android:id="@+id/widget_name"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:text="Aventurier"
-            android:textColor="#EAE6DC"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:singleLine="true"
-            android:ellipsize="end" />
+            android:layout_marginStart="9dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Aventurier"
+                android:textColor="#EAE6DC"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/widget_rank"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Newcomer"
+                android:textColor="#C9A227"
+                android:textSize="11sp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/widget_level"
@@ -44,14 +63,18 @@
             android:textSize="11sp" />
     </LinearLayout>
 
+    <!-- Ce que Lennyx a à dire aujourd'hui -->
     <TextView
-        android:id="@+id/widget_rank"
+        android:id="@+id/widget_mood"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="1dp"
-        android:text="Newcomer"
-        android:textColor="#C9A227"
-        android:textSize="11sp" />
+        android:layout_marginTop="7dp"
+        android:text="Tout est en ordre. Continue."
+        android:textColor="#9AA7B4"
+        android:textSize="11.5sp"
+        android:textStyle="italic"
+        android:maxLines="2"
+        android:ellipsize="end" />
 
     <!-- Barre d'XP -->
     <ProgressBar
@@ -65,20 +88,14 @@
         android:progressDrawable="@drawable/widget_progress_xp" />
 
     <!-- Pas -->
-    <LinearLayout
+    <TextView
+        android:id="@+id/widget_steps"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="10dp">
-        <TextView
-            android:id="@+id/widget_steps"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="0 / 8000 pas"
-            android:textColor="#EAE6DC"
-            android:textSize="12.5sp" />
-    </LinearLayout>
+        android:layout_marginTop="9dp"
+        android:text="0 / 8000 pas"
+        android:textColor="#EAE6DC"
+        android:textSize="12.5sp" />
     <ProgressBar
         android:id="@+id/widget_steps_bar"
         style="?android:attr/progressBarStyleHorizontal"
@@ -89,14 +106,28 @@
         android:progress="0"
         android:progressDrawable="@drawable/widget_progress_steps" />
 
-    <!-- Pied : streak, alarme, taches restantes -->
+    <!-- La prochaine chose à faire, mise en avant par le moteur d'humeur -->
+    <TextView
+        android:id="@+id/widget_next"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="9dp"
+        android:text=""
+        android:textColor="#D4AF37"
+        android:textSize="12sp"
+        android:singleLine="true"
+        android:ellipsize="end" />
+
+    <!-- Pied : streak, alarme, tâches restantes -->
     <TextView
         android:id="@+id/widget_extra"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="5dp"
         android:text="Streak 0j"
         android:textColor="#8F8A80"
-        android:textSize="11.5sp" />
+        android:textSize="11.5sp"
+        android:maxLines="2"
+        android:ellipsize="end" />
 
 </LinearLayout>

@@ -4,6 +4,8 @@ import { DIFFICULTIES, DIFFICULTY_ORDER, WEEKDAYS, isScheduledOn, todayStr, type
 import { Icon } from '../components/Icon';
 import { CompleteButton, DiffTag } from '../components/TaskRow';
 import { LIBRARY, rubrique } from '../game/library';
+import MicButton from '../components/MicButton';
+import VoiceCapture from '../components/VoiceCapture';
 
 function DailyForm({ onClose }: { onClose: () => void }) {
   const addDaily = useStore((s) => s.addDaily);
@@ -31,7 +33,21 @@ function DailyForm({ onClose }: { onClose: () => void }) {
   return (
     <div className="overlay" onClick={onClose}>
       <div className="form-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Nouvelle quotidienne</h3>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h3>Nouvelle quotidienne</h3>
+          <MicButton
+            heading="Dicter une quotidienne"
+            onFill={(d) => {
+              setTitle(d.title);
+              if (d.description) setDescription(d.description);
+              setDifficulty(d.difficulty);
+              if (d.category) setCategory(d.category);
+              setDays(d.days);
+              setTimed(!!d.timeLimit);
+              if (d.timeLimit) setTimeLimit(d.timeLimit);
+            }}
+          />
+        </div>
         <input className="input" placeholder="Titre *" value={title} autoFocus onChange={(e) => setTitle(e.target.value)} />
         <textarea className="input" placeholder="Description (optionnel)" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
         <div className="row">
@@ -90,15 +106,21 @@ function DailyForm({ onClose }: { onClose: () => void }) {
 export default function DailiesPage() {
   const { dailies, completeDaily, deleteDaily } = useStore();
   const [showForm, setShowForm] = useState(false);
+  const [showVoice, setShowVoice] = useState(false);
   const t = todayStr();
 
   return (
     <div>
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
         <h2 className="page-title">Quotidiennes</h2>
-        <button className="btn primary" onClick={() => setShowForm(true)}>
-          <Icon name="plus" size={14} /> Nouvelle quotidienne
-        </button>
+        <div className="row">
+          <button className="btn" onClick={() => setShowVoice(true)}>
+            <Icon name="mic" size={14} /> Dicter
+          </button>
+          <button className="btn primary" onClick={() => setShowForm(true)}>
+            <Icon name="plus" size={14} /> Nouvelle quotidienne
+          </button>
+        </div>
       </div>
       <p className="page-sub">Les rituels bâtissent les empires — protège tes streaks.</p>
 
@@ -155,6 +177,13 @@ export default function DailiesPage() {
         })
       )}
       {showForm && <DailyForm onClose={() => setShowForm(false)} />}
+      {showVoice && (
+        <VoiceCapture
+          heading="Dicter des quotidiennes"
+          intro="« Chaque matin », « en semaine », « tous les jours sauf dimanche », « avant 7h30 » — tout est compris."
+          onClose={() => setShowVoice(false)}
+        />
+      )}
     </div>
   );
 }

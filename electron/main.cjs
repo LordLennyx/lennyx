@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage } = require('electron');
 const path = require('path');
 const http = require('http');
 const os = require('os');
@@ -144,6 +144,25 @@ ipcMain.handle('lennyx-widget-open-app', async () => {
   if (win) { win.show(); win.focus(); }
   else createWindow();
 });
+// ── Icône d'humeur (v0.9) ────────────────────────────────────────────────
+// Le pendant Windows des activity-alias d'Android : la fenêtre et la barre des
+// tâches portent le visage du moment. Les PNG sont générés par gen-icon.mjs et
+// vivent dans dist/icons, donc présents dans l'application empaquetée.
+const MOODS = ['glorieux', 'fier', 'serein', 'vigilant', 'inquiet', 'eteint'];
+ipcMain.handle('lennyx-icon-mood', async (_e, mood) => {
+  if (!win || !MOODS.includes(mood)) return false;
+  try {
+    const file = path.join(__dirname, '..', 'dist', 'icons', `mood-${mood}.png`);
+    const image = nativeImage.createFromPath(file);
+    if (image.isEmpty()) return false;
+    win.setIcon(image);
+    return true;
+  } catch {
+    // l'icône est un ornement : son échec ne doit jamais faire tomber la fenêtre
+    return false;
+  }
+});
+
 ipcMain.handle('lennyx-widget-hide', async () => {
   if (widgetWin) { widgetWin.close(); widgetWin = null; }
 });

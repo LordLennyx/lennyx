@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { addDays, todayStr } from '../game/engine';
 import { Icon } from '../components/Icon';
 import type { NoteKind, TxType } from '../game/types';
+import MicButton from '../components/MicButton';
 
 type Tab = 'finances' | 'journal' | 'wins';
 
@@ -87,6 +88,16 @@ function FinancesTab() {
             className="input" style={{ flex: '1 1 130px' }} placeholder="Catégorie (optionnel)"
             value={category} onChange={(e) => setCategory(e.target.value)}
           />
+          <MicButton
+            heading="Dicter une transaction"
+            intro="« J'ai dépensé deux mille francs pour le transport », « j'ai reçu cinquante mille francs de salaire »."
+            onFill={(d) => {
+              if (d.kind === 'income' || d.kind === 'expense') setType(d.kind);
+              setLabel(d.title);
+              if (d.amount) setAmount(String(d.amount));
+              setCategory(d.txCategory ?? '');
+            }}
+          />
           <button className="btn primary full-mobile" onClick={submit} disabled={!label.trim() || !amount}>
             <Icon name="plus" size={13} /> Ajouter
           </button>
@@ -163,6 +174,14 @@ function JournalTab() {
           onChange={(e) => setText(e.target.value)}
         />
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
+          <MicButton
+            heading="Dicter une note"
+            intro="Parle librement : la note est enregistrée mot pour mot."
+            onFill={(d) => {
+              if (d.kind === 'resolution' || d.kind === 'note') setKind(d.kind);
+              setText(d.title);
+            }}
+          />
           <button className="btn primary" onClick={submit} disabled={!text.trim()}>
             <Icon name="quill" size={13} /> Enregistrer
           </button>
@@ -217,6 +236,11 @@ function WinsTab() {
             placeholder="Aujourd'hui, j'ai réussi à…"
             value={text} onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
+          />
+          <MicButton
+            heading="Dicter une victoire"
+            intro="« J'ai réussi à… » — raconte, Lennyx consigne."
+            onFill={(d) => setText(d.title)}
           />
           <button className="btn primary full-mobile" onClick={submit} disabled={!text.trim()}>
             <Icon name="star" size={13} /> Consigner

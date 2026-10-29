@@ -21,6 +21,7 @@ import { askCloudOracle, OracleOfflineError, OracleQuotaError, defaultModelFor }
 import type { TaskTemplate } from '../game/library';
 import { playSound } from '../lib/sound';
 import { notifyNow } from '../lib/notify';
+import type { VoiceDraft } from '../lib/voiceParse';
 
 interface LennyxState {
   profile: Profile;
@@ -93,6 +94,10 @@ interface LennyxState {
   addTransaction: (t: { type: TxType; label: string; amount: number; category?: string; date?: string }) => void;
   deleteTransaction: (id: string) => void;
   setLLM: (patch: Partial<Profile['llm']>) => void;
+  setDictation: (patch: Partial<Profile['dictation']>) => void;
+  setMoodIcon: (on: boolean) => void;
+  /** Crée d'un coup tout ce qu'une dictée validée contient. */
+  applyVoiceDrafts: (drafts: VoiceDraft[]) => string[];
   completeOnboarding: (data: { goal?: string; rhythm?: string; tone?: Profile['llm']['tone'] }) => void;
   logBreathing: (seconds: number) => void;
   logPomodoro: (workMinutes: number) => void;
@@ -154,6 +159,8 @@ const defaultProfile = (): Profile => ({
   // (vérifié empiriquement), Groq n'a pas cette restriction. Gemini reste sélectionnable.
   llm: { provider: 'groq', apiKey: '', model: defaultModelFor('groq'), tone: 'chaleureux' },
   onboarding: { done: false },
+  dictation: { offlineOnly: true, autoCreate: false, used: 0 },
+  moodIcon: true,
   pomodoro: { workMin: 25, breakMin: 5, longBreakMin: 15, longBreakEvery: 4 },
   timers: {
     chrono: { startedAt: 0, label: '', taskId: '' },
@@ -1109,6 +1116,85 @@ export const useStore = create<LennyxState>()(
         deleteTransaction: (id) => set((s) => ({ transactions: s.transactions.filter((t) => t.id !== id) })),
 
         setLLM: (patch) => set((s) => ({ profile: { ...s.profile, llm: { ...s.profile.llm, ...patch } } })),
+
+        setDictation: (patch) =>
+          set((s) => ({ profile: { ...s.profile, dictation: { ...s.profile.dictation, ...patch } } })),
+        setMoodIcon: (on) => set((s) => ({ profile: { ...s.profile, moodIcon: on } })),
+
+        /**
+         * Applique une dictée VALIDÉE. Chaque brouillon atterrit dans le bon
+         * registre — quête, quotidienne, note, transaction — en réutilisant
+         * exactement les mêmes fabriques que les formulaires : la dictée n'est
+         * qu'une autre façon de remplir le formulaire, jamais un chemin
+         * parallèle qui se mettrait à diverger.
+         */
+        applyVoiceDrafts: (drafts) => {
+          const created: string[] = [];
+          for (const d of drafts) {
+            const title = d.title.trim();
+            if (!title) continue;
+            switch (d.kind) {
+              case 'quest': {
+                const quest = makeQuest({
+                  title,
+                  description: d.description || undefined,
+                  type: d.isEvent ? 'event' : 'quest',
+                  difficulty: d.difficulty,
+                  category: d.category,
+                  deadline: d.deadline,
+                  subquests: d.subquests,
+                });
+                set((s) => ({ quests: [quest, ...s.quests] }));
+                created.push(`Quête : ${title}`);
+                break;
+              }
+              case 'daily': {
+                const daily = makeDaily({
+                  title,
+                  description: d.description || undefined,
+                  difficulty: d.difficulty,
+                  category: d.category,
+                  days: d.days,
+                  timeLimit: d.timeLimit,
+                });
+                set((s) => ({ dailies: [daily, ...s.dailies] }));
+                created.push(`Quotidienne : ${title}`);
+                break;
+              }
+              case 'note':
+              case 'resolution':
+              case 'win': {
+                const kind = d.kind === 'win' ? 'accomplishment' : d.kind === 'resolution' ? 'resolution' : 'note';
+                get().addNote(kind, title);
+                created.push(`${d.kind === 'win' ? 'Victoire' : d.kind === 'resolution' ? 'Résolution' : 'Note'} : ${title}`);
+                break;
+              }
+              case 'expense':
+              case 'income': {
+                if (!d.amount || d.amount <= 0) break;
+                get().addTransaction({
+                  type: d.kind === 'income' ? 'income' : 'expense',
+                  label: title,
+                  amount: d.amount,
+                  category: d.txCategory,
+                });
+                created.push(`${d.kind === 'income' ? 'Revenu' : 'Dépense'} : ${title} (${d.amount.toLocaleString('fr-FR')})`);
+                break;
+              }
+            }
+          }
+          if (created.length > 0) {
+            set((s) => ({
+              profile: {
+                ...s.profile,
+                dictation: { ...s.profile.dictation, used: s.profile.dictation.used + 1 },
+              },
+            }));
+            playSound('complete', get().profile.soundOn);
+            pushToast('sparkle', created.length === 1 ? 'Dictée : 1 élément créé' : `Dictée : ${created.length} éléments créés`, 'info');
+          }
+          return created;
+        },
         completeOnboarding: (data) =>
           set((s) => ({
             profile: {
@@ -1217,7 +1303,7 @@ export const useStore = create<LennyxState>()(
     },
     {
       name: 'lennyx-save',
-      version: 9,
+      version: 10,
       partialize: (s) => ({
         profile: s.profile,
         quests: s.quests,
@@ -1350,6 +1436,19 @@ export const useStore = create<LennyxState>()(
             ...def,
             ...data.profile,
             steps: { ...def.steps, ...data.profile.steps, native: data.profile.steps?.native ?? {} },
+          };
+        }
+        if (version < 10 && data?.profile) {
+          // v10 : dictée vocale et icône d'humeur. Les deux arrivent activées
+          // pour les profils existants — c'est l'intérêt de la mise à jour —
+          // mais `autoCreate` reste faux : on ne crée jamais une tâche dictée
+          // sans que l'utilisateur l'ait vue.
+          const def = defaultProfile();
+          data.profile = {
+            ...def,
+            ...data.profile,
+            dictation: { ...def.dictation, ...data.profile.dictation },
+            moodIcon: data.profile.moodIcon ?? def.moodIcon,
           };
         }
         if (version < 9 && data?.profile) {

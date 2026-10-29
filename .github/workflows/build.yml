@@ -10,6 +10,19 @@ on:
 # deux échoue systématiquement.
 
 jobs:
+  # Logique pure : parseur de dictée et moteur d'humeur. Rapide, et c'est là
+  # qu'une régression passerait inaperçue à l'œil nu.
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
   windows-exe:
     runs-on: windows-latest
     steps:
